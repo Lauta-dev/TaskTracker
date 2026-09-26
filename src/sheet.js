@@ -4,11 +4,11 @@ export function sheetFromSearch(search) {
   return new URLSearchParams(search || "").get("sheet") || "";
 }
 
-/** ?sheet= válido → ese; si no, última usada válida; si no, primera. */
+/** ?sheet= manda (aunque la lista aún no lo traiga); si no hay, última; si no, primera. */
 export function resolveSheet(search, names) {
   const list = names || [];
   const q = sheetFromSearch(search);
-  if (q && list.includes(q)) return q;
+  if (q) return q;
   const last = lastSheet();
   if (last && list.includes(last)) return last;
   return list[0] || "";

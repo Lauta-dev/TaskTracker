@@ -28,6 +28,13 @@ export function useRows(sheet) {
     };
   }, [sheet, tick]);
 
+  useEffect(() => {
+    // Un guardado avisa y se refetchea (ej. modal de Registro).
+    const onSaved = () => setTick((t) => t + 1);
+    window.addEventListener("tt:rows", onSaved);
+    return () => window.removeEventListener("tt:rows", onSaved);
+  }, []);
+
   // Fuerza refetch.
   const retry = () => setTick((t) => t + 1);
 

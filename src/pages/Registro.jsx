@@ -16,13 +16,13 @@ const field =
 const label =
   "font-data mb-1.5 block text-[11px] uppercase tracking-widest text-muted-foreground";
 
-const DEFAULT_HABS = ["Listening", "Vocabulary", "Reading", "Grammar", "Inglés"];
-const DEFAULT_RECS = ["Anki", "YT", "Serie", "Anime", "Movie", "Busuu"];
+const DEFAULT_HABS = ["Listening", "Vocabulary", "Reading", "Grammar"];
+const DEFAULT_RECS = ["Anki", "YT", "Serie", "Anime", "Movie"];
 
-export function Registro() {
+export function Registro({ onSaved, sheet: sheetProp }) {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const sheet = sheetFromSearch(search);
+  const sheet = sheetProp || sheetFromSearch(search);
   const { rows } = useRows(sheet);
 
   const habs = [...new Set([...DEFAULT_HABS, ...(rows || []).map((r) => r.habilidad)])];
@@ -70,7 +70,9 @@ export function Registro() {
         setQueuedMsg("Sin conexión: quedó en cola, se manda solo.");
         return;
       }
-      navigate(`/?sheet=${encodeURIComponent(sheet)}`);
+      window.dispatchEvent(new Event("tt:rows"));
+      if (onSaved) onSaved();
+      else navigate(`/?sheet=${encodeURIComponent(sheet)}`);
     });
   }
 
@@ -88,9 +90,8 @@ export function Registro() {
   return (
     <div>
       <div class="mb-4">
-        <h1 class="font-display text-[24px] font-semibold">
-          <>Registrar<span class="text-muted-foreground"> &gt; {sheet}</span></>
-        </h1>
+        <h1 class="font-display text-[24px] font-semibold leading-tight">Registrar</h1>
+        <p class="mt-0.5 text-[14px] text-muted-foreground">{sheet}</p>
       </div>
 
       <form onSubmit={onSubmit} class="rounded-xl border border-border bg-card p-4">
@@ -106,20 +107,20 @@ export function Registro() {
 
         <div class="mb-4 grid grid-cols-2 gap-3">
           <div>
-            <label class={label} for="f-hab">Habilidad</label>
-            <Select value={habilidad} onValueChange={setHabilidad}>
-              <SelectTrigger id="f-hab"><SelectValue placeholder="Elegí…" /></SelectTrigger>
-              <SelectContent>
-                {habs.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
             <label class={label} for="f-rec">Tipo</label>
             <Select value={recurso} onValueChange={setRecurso}>
               <SelectTrigger id="f-rec"><SelectValue placeholder="Elegí…" /></SelectTrigger>
               <SelectContent>
                 {recs.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label class={label} for="f-hab">Habilidad</label>
+            <Select value={habilidad} onValueChange={setHabilidad}>
+              <SelectTrigger id="f-hab"><SelectValue placeholder="Elegí…" /></SelectTrigger>
+              <SelectContent>
+                {habs.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

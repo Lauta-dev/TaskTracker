@@ -1,11 +1,10 @@
 import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { pendingCount, createSheet, saveLastSheet } from "../api.js";
+import { pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { currentMonth, monthCells } from "../dates.js";
 import { fmtTotal } from "../format.js";
 import { resolveSheet } from "../sheet.js";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Sheet } from "../components/ui/sheet";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
@@ -27,47 +26,46 @@ function level(ratio) {
 
 const pad = (n) => String(n).padStart(2, "0");
 
-export function Graph({ names, refreshList }) {
+export function Graph({ names }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
   const [sheetKey, setSheetKey] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [newName, setNewName] = useState("");
 
   const list = names || [];
   const sheet = resolveSheet(search, list);
   const { rows: apiRows, live, error, retry } = useRows(sheet);
 
-  // URL predecible: si no hay ?sheet= válido, se fija al resuelto.
+  // URL predecible: si no hay ?sheet=, se fija al resuelto.
   // Solo en "/" — si la vista está saliendo (ej. a /hojas), no secuestrar.
   useEffect(() => {
-    if (path !== "/" || names === null || !sheet) return;
+    if (path !== "/" || names === null) return;
     const params = new URLSearchParams(search || "");
-    if (params.get("sheet") !== sheet) {
+    if (!params.get("sheet") && sheet) {
       saveLastSheet(sheet);
       navigate(`/?sheet=${encodeURIComponent(sheet)}`, { replace: true });
     }
   }, [path, names, sheet, search ]);
 
-  function pick(name) {
-    saveLastSheet(name);
-    setExpanded(false);
-    navigate(`/?sheet=${encodeURIComponent(name)}`);
-  }
-
-  function create() {
-    const clean = newName.trim();
-    if (!clean) return;
-    if (!createSheet(clean)) return;
-    setNewName("");
-    refreshList();
-    pick(clean);
-  }
-
   // Mes a mostrar: el más reciente entre las filas (la hoja define su mes);
   // si no hay filas, el actual del dispositivo.
   const now = currentMonth();
+  // Skeleton con la forma del mes actual del dispositivo.
+  const skelCells = monthCells(now.y, now.m);
+  let skelFirst = -1, skelLast = -1;
+  skelCells.forEach((c, i) => {
+    if (c === null) return;
+    if (skelFirst === -1) skelFirst = i;
+    skelLast = i;
+  });
+  const skelCorner = (i) => [
+    (i === 0 || i === skelFirst) && "rounded-tl-md",
+    i === 6 && "rounded-tr-md",
+    i === 7 && "rounded-tl-md",
+    i === skelCells.length - 7 && "rounded-bl-md",
+    i === skelCells.length - 1 && "rounded-br-md",
+  ].filter(Boolean).join(" ");
   let y = now.y, m = now.m;
   if (apiRows && apiRows.length > 0) {
     const months = [...new Set(apiRows.map((r) => r.key?.slice(0, 7)).filter(Boolean))].sort();
@@ -99,6 +97,27 @@ export function Graph({ names, refreshList }) {
     c === null ? null : { ...c, total: dayInfo.get(c.key)?.total || 0 },
   );
 
+  // Celdas vacías después del último día → total del mes.
+  let firstIdx = -1, lastIdx = -1;
+  cells.forEach((c, i) => {
+    if (c === null) return;
+    if (firstIdx === -1) firstIdx = i;
+    lastIdx = i;
+  });
+  const monthTotal = [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
+  // Esquinas redondeadas puntuales de la grilla.
+  // El arriba-izq va al primer día visible (el índice 0 puede ser hueco).
+  const corner = (i) => [
+    (i === 0 || i === firstIdx) && "rounded-tl-md",
+    i === 6 && "rounded-tr-md",
+    i === 7 && "rounded-tl-md",
+    i === cells.length - 7 && "rounded-bl-md",
+    i === cells.length - 1 && "rounded-br-md",
+  ].filter(Boolean).join(" ");
+  // Intensidad del bloque total: promedio por día activo vs mejor día.
+  const monthLv = level(monthTotal > 0 && dayInfo.size > 0 ? monthTotal / (maxSecs * dayInfo.size) : 0);
+  const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-neutral-950" : "text-foreground";
+
   const visibleRows = expanded ? rows : rows.slice(0, 5);
 
   function openDay(key) {
@@ -113,36 +132,8 @@ export function Graph({ names, refreshList }) {
   return (
     <div>
       <div class="mb-4">
-        {names === null ? (
-          <div aria-hidden="true" class="h-11 w-44 animate-pulse rounded-md bg-muted" />
-        ) : list.length === 0 ? (
-          <p class="text-sm text-muted-foreground">No hay hojas. Creá una en Hojas.</p>
-        ) : (
-          <Select value={sheet} onValueChange={pick}>
-            <SelectTrigger class="font-display h-auto w-auto max-w-full gap-1.5 whitespace-nowrap rounded-md border-0 bg-muted px-3 py-1.5 text-[20px] font-semibold shadow-none focus-visible:ring-2">
-              <SelectValue>{sheet || "Elegí hoja"}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {list.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
-              <div class="mt-1 flex gap-1 border-t border-border p-1 pt-2">
-                <input
-                  type="text"
-                  value={newName}
-                  onInput={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") create(); }}
-                  placeholder="Nueva hoja…"
-                  class="h-8 min-w-0 flex-1 rounded-sm bg-background px-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-                <button
-                  type="button"
-                  onClick={create}
-                  class="h-8 shrink-0 rounded-sm bg-primary px-3 text-[13px] font-semibold text-primary-foreground active:opacity-90"
-                >
-                  Añadir
-                </button>
-              </div>
-            </SelectContent>
-          </Select>
+        {list.length === 0 && apiRows !== null && (
+          <p class="text-sm text-muted-foreground">No hay hojas. Creá una desde el selector.</p>
         )}
         <p class="font-data mt-2 text-[11px] uppercase tracking-widest text-muted-foreground">{monthName}</p>
         {apiRows !== null && !live && (
@@ -156,23 +147,64 @@ export function Graph({ names, refreshList }) {
         )}
       </div>
 
-      <div class="grid grid-cols-7 gap-1.5">
+      <div class="grid grid-cols-7 gap-1">
         {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
-          <div key={w} class="font-data pb-1 text-center text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div key={w} class="font-data pb-1 text-center text-[13px] uppercase tracking-widest text-muted-foreground">
             {w}
           </div>
         ))}
         {apiRows === null
-          ? Array.from({ length: 35 }).map((_, i) => (
-              <div
-                key={"s" + i}
-                aria-hidden="true"
-                style={{ animationDelay: `${(i % 7) * 60}ms` }}
-                class="aspect-square w-full animate-pulse rounded-md bg-muted"
-              />
-            ))
+          ? skelCells.map((c, i) => {
+              if (c === null) {
+                if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" class={skelCorner(i)} />;
+                if (i !== skelLast + 1) return null;
+                const span = skelCells.length - 1 - skelLast;
+                return (
+                  <div
+                    key="skel-total"
+                    aria-hidden="true"
+                    style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}
+                    class={`min-h-full w-full animate-pulse bg-muted rounded-br-md ${i === skelCells.length - 7 ? "rounded-bl-md" : ""}`}
+                  />
+                );
+              }
+              return (
+                <div
+                  key={"s" + i}
+                  aria-hidden="true"
+                  style={{ animationDelay: `${(i % 7) * 60}ms` }}
+                  class={`aspect-square w-full animate-pulse bg-muted ${skelCorner(i)}`}
+                />
+              );
+            })
           : cells.map((d, i) => {
-          if (d == null) return <div key={"x" + i} />;
+          if (d == null) {
+            if (i <= lastIdx) return <div key={"x" + i} class={corner(i)} />;
+            // Relleno final: un solo bloque que ocupa todos los espacios.
+            if (i !== lastIdx + 1) return null;
+            const span = cells.length - 1 - lastIdx;
+            const totalCorners = [
+              i === 0 && "rounded-tl-md",
+              i === 6 && "rounded-tr-md",
+              i === 7 && "rounded-tl-md",
+              i === cells.length - 7 && "rounded-bl-md",
+              "rounded-br-md",
+            ].filter(Boolean).join(" ");
+            return (
+              <div
+                key="month-total"
+                title={`Total del mes: ${fmtTotal(monthTotal)}`}
+                style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}
+                class={`relative min-h-full w-full overflow-hidden border border-border ${LEVEL_BG[monthLv]} ${totalCorners}`}
+              >
+                <span class="absolute inset-0 flex items-center justify-center p-1.5">
+                  <span class={`font-data text-[16px] font-bold leading-none ${monthTcls}`}>
+                    {fmtTotal(monthTotal)}
+                  </span>
+                </span>
+              </div>
+            );
+          }
           const lv = level(d.total / maxSecs);
           // lv 0: apagado · lv 1-2: medios → texto del tema · lv 3-4: brasa viva → texto oscuro fijo
           const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-neutral-950" : "text-foreground";
@@ -182,16 +214,16 @@ export function Graph({ names, refreshList }) {
               key={d.key}
               onClick={() => openDay(d.key)}
               title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-              class={`relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border border-border text-left ${LEVEL_BG[lv]} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              class={`relative aspect-square w-full cursor-pointer overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${corner(i)} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
             >
-              <span class="absolute inset-0 flex flex-col justify-between p-1.5">
+              <span class="absolute inset-0 flex flex-col justify-between p-2">
                 <span
-                  class={`font-data text-[12px] font-bold leading-none ${tcls}`}
+                  class={`font-data text-[16px] font-bold leading-none ${tcls}`}
                 >
                   {d.day}
                 </span>
                 {d.total > 0 && (
-                    <span class={`font-data text-[11px] font-bold leading-none ${tcls}`}>
+                    <span class={`font-data text-[13px] font-bold leading-none ${tcls}`}>
                     {fmtTotal(d.total)}
                   </span>
                 )}
@@ -209,12 +241,12 @@ export function Graph({ names, refreshList }) {
             ))}
           </div>
         ) : rows.length > 0 ? (
-          <table class="w-full text-left text-[13px]">
+          <table class="w-full table-fixed text-left text-[13px]">
             <thead>
               <tr class="bg-muted font-data text-[10px] uppercase tracking-widest text-muted-foreground">
-                <th class="px-3 py-2 font-medium">Día</th>
+                <th class="w-10 px-3 py-2 font-medium">Día</th>
                 <th class="px-3 py-2 font-medium">Actividad</th>
-                <th class="px-3 py-2 text-right font-medium">Tiempo</th>
+                <th class="w-20 px-3 py-2 text-right font-medium">Tiempo</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
