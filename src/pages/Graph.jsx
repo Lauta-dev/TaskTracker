@@ -1,11 +1,14 @@
 import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { pendingCount, saveLastSheet } from "../api.js";
+import { localSheets, pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { currentMonth, monthCells } from "../dates.js";
-import { fmtTotal } from "../format.js";
+import { fmtTotal, level } from "../format.js";
 import { resolveSheet } from "../sheet.js";
 import { Sheet } from "../components/ui/sheet";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Bars } from "../components/Bars";
+import { ChartColumn, Check, LayoutGrid, Table } from "lucide-preact";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
 const LEVEL_BG = [
@@ -16,33 +19,24 @@ const LEVEL_BG = [
   "bg-chart-2",
 ];
 
-function level(ratio) {
-  if (ratio <= 0) return 0;
-  if (ratio <= 0.25) return 1;
-  if (ratio <= 0.5) return 2;
-  if (ratio <= 0.75) return 3;
-  return 4;
-}
-
-const pad = (n) => String(n).padStart(2, "0");
-
 export function Graph({ names }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
   const [sheetKey, setSheetKey] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [vista, setVista] = useState("grilla");
 
   const list = names || [];
   const sheet = resolveSheet(search, list);
   const { rows: apiRows, live, error, retry } = useRows(sheet);
 
-  // URL predecible: si no hay ?sheet=, se fija al resuelto.
-  // Solo en "/" — si la vista está saliendo (ej. a /hojas), no secuestrar.
+  // URL predecible: si no hay ?sheet= o apunta a una hoja que no existe,
+  // se fija al resuelto. Solo en "/" — si la vista está saliendo, no secuestrar.
   useEffect(() => {
     if (path !== "/" || names === null) return;
     const params = new URLSearchParams(search || "");
-    if (!params.get("sheet") && sheet) {
+    const param = params.get("sheet");
+    if ((!param || (param !== sheet && !localSheets().includes(param))) && sheet) {
       saveLastSheet(sheet);
       navigate(`/?sheet=${encodeURIComponent(sheet)}`, { replace: true });
     }
@@ -75,8 +69,53 @@ export function Graph({ names }) {
       m = Number(latest.slice(5, 7));
     }
   }
-  const prefix = `${y}-${pad(m)}`;
+  const prefix = `${y}-${String(m).padStart(2, "0")}`;
   const monthName = new Date(y, m - 1, 1).toLocaleDateString("es", { month: "long", year: "numeric" });
+
+  // Comparar hojas (cada hoja ≈ un mes): hasta 2, con checkboxes.
+  // Sin elección: la hoja en pantalla.
+  const [picked, setPicked] = useState([]);
+  const cmp = picked.length > 0 ? picked.slice(-2) : [sheet];
+
+  function toggleMonth(name) {
+    setPicked((cur) => cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name].slice(-2));
+  }
+
+  // Filas de las comparadas que no están en pantalla (2 hooks fijos).
+  const otherA = cmp[0] && cmp[0] !== sheet ? cmp[0] : null;
+  const otherB = cmp[1] && cmp[1] !== sheet ? cmp[1] : null;
+  const rowsA = useRows(otherA);
+  const rowsB = useRows(otherB);
+
+  function rowsFor(name) {
+    if (name === sheet) return apiRows;
+    if (name === otherA) return rowsA.rows;
+    if (name === otherB) return rowsB.rows;
+    return [];
+  }
+
+  function latestPrefix(all) {
+    const months = [...new Set((all || []).map((r) => r.key?.slice(0, 7)).filter(Boolean))].sort();
+    return months[months.length - 1] || "";
+  }
+
+  const seriesLoading = cmp.some((name) => rowsFor(name) === null);
+  const series = cmp.map((name, idx) => {
+    const all = rowsFor(name) || [];
+    const p = latestPrefix(all);
+    const dm = new Map();
+    for (const r of all) {
+      if (p && r.key?.slice(0, 7) !== p) continue;
+      const d = Number(r.key.slice(8, 10));
+      dm.set(d, (dm.get(d) || 0) + r.secs);
+    }
+    const n = p ? new Date(Number(p.slice(0, 4)), Number(p.slice(5, 7)), 0).getDate() : 30;
+    return {
+      label: name,
+      color: idx === 0 ? "var(--color-chart-2)" : "var(--color-chart-4)",
+      days: Array.from({ length: n }, (_, i) => ({ day: i + 1, total: dm.get(i + 1) || 0 })),
+    };
+  });
 
   const dayInfo = new Map();
   for (const r of apiRows || []) {
@@ -118,8 +157,6 @@ export function Graph({ names }) {
   const monthLv = level(monthTotal > 0 && dayInfo.size > 0 ? monthTotal / (maxSecs * dayInfo.size) : 0);
   const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-neutral-950" : "text-foreground";
 
-  const visibleRows = expanded ? rows : rows.slice(0, 5);
-
   function openDay(key) {
     setSheetKey(key);
     setSheetOpen(true);
@@ -147,7 +184,68 @@ export function Graph({ names }) {
         )}
       </div>
 
-      <div class="grid grid-cols-7 gap-1">
+      <div class="mb-3 flex w-fit gap-1 rounded-full bg-muted p-1">
+        <button
+          type="button"
+          onClick={() => setVista("grilla")}
+          aria-pressed={vista === "grilla"}
+          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            vista === "grilla" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+          }`}
+        >
+          <LayoutGrid class="size-4" /> Grilla
+        </button>
+        <button
+          type="button"
+          onClick={() => setVista("barras")}
+          aria-pressed={vista === "barras"}
+          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            vista === "barras" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+          }`}
+        >
+          <ChartColumn class="size-4" /> Barras
+        </button>
+        <button
+          type="button"
+          onClick={() => setVista("tabla")}
+          aria-pressed={vista === "tabla"}
+          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            vista === "tabla" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+          }`}
+        >
+          <Table class="size-4" /> Tabla
+        </button>
+      </div>
+
+      {vista === "barras" && list.length > 1 && (
+        <div class="mb-3">
+          <Select value="">
+            <SelectTrigger class="h-9 w-full gap-2 rounded-full border-0 bg-muted px-3 text-[13px] font-medium shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
+              <SelectValue>{cmp.join(" vs ")}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {list.map((n) => {
+                const on = cmp.includes(n);
+                return (
+                  <div
+                    key={n}
+                    onClick={() => toggleMonth(n)}
+                    class="flex cursor-default select-none items-center gap-2.5 rounded-sm px-2 py-2.5 text-[15px]"
+                  >
+                    <span class={`flex size-4 shrink-0 items-center justify-center rounded border ${on ? "border-chart-2 bg-chart-2" : "border-muted-foreground"}`}>
+                      {on && <Check class="size-3 text-neutral-950" />}
+                    </span>
+                    <span class="min-w-0 flex-1 truncate">{n}</span>
+                  </div>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {vista !== "tabla" && (vista === "grilla" ? (
+      <div key="grilla" class="grid grid-cols-7 gap-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
         {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
           <div key={w} class="font-data pb-1 text-center text-[13px] uppercase tracking-widest text-muted-foreground">
             {w}
@@ -232,8 +330,16 @@ export function Graph({ names }) {
           );
         })}
       </div>
+      ) : seriesLoading ? (
+        <div key="barras-loading" aria-hidden="true" class="h-[240px] animate-pulse rounded-md bg-muted" />
+      ) : (
+        <div key="barras" class="relative left-1/2 w-[94vw] -translate-x-1/2 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+          <Bars series={series} />
+        </div>
+      ))}
 
-      <div class="mt-6 overflow-hidden rounded-md border border-border">
+      {vista === "tabla" && (
+      <div key="tabla" class="mt-6 overflow-hidden rounded-md border border-border animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
         {apiRows === null ? (
           <div class="space-y-2 p-3" aria-hidden="true">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -250,14 +356,14 @@ export function Graph({ names }) {
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
-              {visibleRows.map((r, i) => (
+              {rows.map((r, i) => (
                 <tr key={r.key + "-" + i}>
                   <td class="whitespace-nowrap px-3 py-2 font-data text-muted-foreground">{r.key.slice(8, 10)}</td>
                   <td class="px-3 py-2">
                     <p class="font-medium leading-snug">
                       {r.url ? (
                         <a href={r.url} target="_blank" rel="noreferrer" class="underline underline-offset-2">
-                          {r.titulo} ↗
+                          {r.titulo}
                         </a>
                       ) : r.titulo}
                     </p>
@@ -273,16 +379,8 @@ export function Graph({ names }) {
         ) : (
           <p class="px-4 py-3 text-sm text-muted-foreground">Sin registros en esta hoja.</p>
         )}
-        {rows.length > 5 && (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            class="w-full bg-muted px-4 py-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {expanded ? "Ver menos ↑" : `Ver los ${rows.length} ↓`}
-          </button>
-        )}
       </div>
+      )}
 
       <Sheet
         open={sheetOpen}

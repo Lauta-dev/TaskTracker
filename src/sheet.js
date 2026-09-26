@@ -1,15 +1,17 @@
-import { lastSheet } from "./api.js";
+import { lastSheet, localSheets } from "./api.js";
 
 export function sheetFromSearch(search) {
   return new URLSearchParams(search || "").get("sheet") || "";
 }
 
-/** ?sheet= manda (aunque la lista aún no lo traiga); si no hay, última; si no, primera. */
+/** ?sheet= manda si está en la lista o es local (recién creada);
+ * si no, última válida; si no, primera. */
 export function resolveSheet(search, names) {
   const list = names || [];
+  const locals = localSheets();
   const q = sheetFromSearch(search);
-  if (q) return q;
+  if (q && (list.includes(q) || locals.includes(q))) return q;
   const last = lastSheet();
-  if (last && list.includes(last)) return last;
+  if (last && (list.includes(last) || locals.includes(last))) return last;
   return list[0] || "";
 }

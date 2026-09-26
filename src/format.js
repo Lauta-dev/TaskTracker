@@ -25,3 +25,12 @@ export function normalizeUrl(u) {
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(t)) return t;
   return "https://" + t;
 }
+
+// Ratio 0..1 -> nivel 0..4 para la rampa de color.
+export function level(ratio) {
+  if (ratio <= 0) return 0;
+  if (ratio <= 0.25) return 1;
+  if (ratio <= 0.5) return 2;
+  if (ratio <= 0.75) return 3;
+  return 4;
+}

@@ -1,6 +1,11 @@
 import { dayKey } from "./dates.js";
 import { parseDuration, parseRows } from "./parse.js";
 import { del, get, set } from "./storage.js";
+import mock from "./mock/data.json";
+
+// Prueba: datos congelados de la API (src/mock/data.json). Solo lectura;
+// el POST sigue yendo a la API real. Poner en false para vivo.
+export const USE_MOCK = false;
 
 const GAS_ID = import.meta.env?.VITE_GAS_ID || "";
 const API_BASE = GAS_ID ? `https://script.google.com/macros/s/${GAS_ID}/exec` : "";
@@ -61,12 +66,16 @@ export function saveLastSheet(name) {
 /** Una sola lista: API + locales, sin duplicados. */
 export async function listSheets() {
   let api = [];
-  try {
-    const data = await req(`${API_BASE}?action=getSheet`);
-    const names = Array.isArray(data) ? data : data?.sheets || [];
-    api = names.filter((n) => typeof n === "string");
-  } catch {
-    api = [];
+  if (USE_MOCK) {
+    api = [...(mock.sheets || [])];
+  } else {
+    try {
+      const data = await req(`${API_BASE}?action=getSheet`);
+      const names = Array.isArray(data) ? data : data?.sheets || [];
+      api = names.filter((n) => typeof n === "string");
+    } catch {
+      api = [];
+    }
   }
   return [...new Set([...api, ...localSheets()])];
 }
@@ -101,13 +110,19 @@ function pendingToRow(p) {
 
 export async function getRows(sheet) {
   try {
-    const data = await req(`${API_BASE}?sheet=${encodeURIComponent(sheet)}`);
-    const matrix = Array.isArray(data) ? data : data?.rows || data?.data || [];
+    const matrix = USE_MOCK
+      ? mock.rows?.[sheet] || []
+      : await fetchMatrix(sheet);
     const queued = pendingFor(sheet).map(pendingToRow).filter(Boolean);
     return { rows: parseRows(matrix).concat(queued), live: true, error: "" };
   } catch (e) {
     return { rows: pendingFor(sheet).map(pendingToRow).filter(Boolean), live: false, error: e?.message || "error de red" };
   }
+}
+
+async function fetchMatrix(sheet) {
+  const data = await req(`${API_BASE}?sheet=${encodeURIComponent(sheet)}`);
+  return Array.isArray(data) ? data : data?.rows || data?.data || [];
 }
 
 /* ---------- escribir: POST, si falla se encola ---------- */

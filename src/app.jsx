@@ -2,7 +2,7 @@ import { useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
 import { Plus } from "lucide-preact";
 import { useSheets } from "./hooks/useSheets";
-import { saveLastSheet } from "./api.js";
+import { saveLastSheet, USE_MOCK } from "./api.js";
 import { Graph } from "./pages/Graph";
 import { Registro } from "./pages/Registro";
 import { Modal } from "./components/ui/modal";
@@ -31,6 +31,11 @@ export function App() {
           <div class="flex shrink-0 items-center gap-2.5">
             <img src="/icons.svg" alt="Tinta" class="size-7 rounded-md" />
             <p class="font-display text-[17px] font-semibold tracking-tight">Tinta</p>
+            {USE_MOCK && (
+              <span class="font-data rounded-full bg-chart-2/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-foreground">
+                mock
+              </span>
+            )}
           </div>
           <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
         </header>
