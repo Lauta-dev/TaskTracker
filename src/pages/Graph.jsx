@@ -6,6 +6,7 @@ import { currentMonth, dayKey, monthCells } from "../dates.js";
 import { fmtTotal, level } from "../format.js";
 import { resolveSheet } from "../sheet.js";
 import { Sheet } from "../components/ui/sheet";
+import { Stats } from "../components/Stats";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Bars } from "../components/Bars";
 import { ChartColumn, Check, LayoutGrid, Table } from "lucide-preact";
@@ -56,8 +57,6 @@ export function Graph({ names }) {
   const skelCorner = (i) => [
     (i === skelFirst || (skelFirst > 0 && i === 7)) && "rounded-tl-md",
     i === 6 && "rounded-tr-md",
-    i === skelCells.length - 7 && "rounded-bl-md",
-    i === skelCells.length - 1 && "rounded-br-md",
   ].filter(Boolean).join(" ");
   let y = now.y, m = now.m;
   if (apiRows && apiRows.length > 0) {
@@ -144,20 +143,13 @@ export function Graph({ names }) {
   });
   const monthTotal = [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
   const today = dayKey(new Date());
-  // Objetivo: 2h por día × días transcurridos (mes actual) o del mes (otros).
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const isCurrent = y === now.y && m === now.m;
-  const elapsed = isCurrent ? Math.min(new Date().getDate(), daysInMonth) : daysInMonth;
-  const goal = 2 * 3600 * elapsed;
-  const goalPct = Math.min(100, Math.round((monthTotal / goal) * 100));
-  // Esquinas redondeadas puntuales de la grilla.
+  // Esquinas redondeadas puntuales de la grilla (solo arriba).
   // El arriba-izq va al primer día visible; el de la segunda semana solo
   // si la primera fila no está completa (mes que no arranca lunes).
+  // La última fila queda cuadrada: el cierre lo da el pie de stats.
   const corner = (i) => [
     (i === firstIdx || (firstIdx > 0 && i === 7)) && "rounded-tl-md",
     i === 6 && "rounded-tr-md",
-    i === cells.length - 7 && "rounded-bl-md",
-    i === cells.length - 1 && "rounded-br-md",
   ].filter(Boolean).join(" ");
   // Intensidad del bloque total: promedio por día activo vs mejor día.
   const monthLv = level(monthTotal > 0 && dayInfo.size > 0 ? monthTotal / (maxSecs * dayInfo.size) : 0);
@@ -269,7 +261,7 @@ export function Graph({ names }) {
                     key="skel-total"
                     aria-hidden="true"
                     style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}
-                    class={`min-h-full w-full animate-pulse bg-muted rounded-br-md ${i === skelCells.length - 7 ? "rounded-bl-md" : ""}`}
+                    class="min-h-full w-full animate-pulse bg-muted"
                   />
                 );
               }
@@ -288,19 +280,12 @@ export function Graph({ names }) {
             // Relleno final: un solo bloque que ocupa todos los espacios.
             if (i !== lastIdx + 1) return null;
             const span = cells.length - 1 - lastIdx;
-            const totalCorners = [
-              i === 0 && "rounded-tl-md",
-              i === 6 && "rounded-tr-md",
-              i === 7 && "rounded-tl-md",
-              i === cells.length - 7 && "rounded-bl-md",
-              "rounded-br-md",
-            ].filter(Boolean).join(" ");
             return (
               <div
                 key="month-total"
                 title={`Total del mes: ${fmtTotal(monthTotal)}`}
                 style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}
-                class={`relative min-h-full w-full overflow-hidden border border-border ${LEVEL_BG[monthLv]} ${totalCorners}`}
+                class={`relative min-h-full w-full overflow-hidden border border-border ${LEVEL_BG[monthLv]}`}
               >
                 <span class="absolute inset-0 flex items-center justify-center p-1.5">
                   <span class={`font-data text-[14px] font-bold leading-none ${monthTcls}`}>
@@ -347,21 +332,15 @@ export function Graph({ names }) {
             </button>
           );
         })}
-      </div>
-      <div class="mt-4 rounded-md border border-border bg-card p-3">
-        <div class="flex items-baseline justify-between gap-2">
-          <p class="text-[13px] font-medium">Objetivo · 2h/día</p>
-          <p class="font-data text-[12px] text-muted-foreground">{fmtTotal(monthTotal)} / {fmtTotal(goal)}</p>
-        </div>
-        <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-muted">
-          <div
-            class="h-full rounded-full bg-chart-2 transition-all"
-            style={{ width: goalPct + "%" }}
-          />
-        </div>
-        <p class="font-data mt-1.5 text-[11px] text-muted-foreground">
-          {monthTotal >= goal ? "¡Objetivo cumplido!" : `${goalPct}% · te faltan ${fmtTotal(goal - monthTotal)}`}
-        </p>
+        {apiRows === null ? (
+          <div class="col-span-7 grid grid-cols-4 gap-1 rounded-b-md border-x border-b border-border bg-card p-2" aria-hidden="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={"f" + i} class="h-[52px] animate-pulse rounded-md bg-muted" />
+            ))}
+          </div>
+        ) : (
+          <Stats dayInfo={dayInfo} monthTotal={monthTotal} y={y} m={m} />
+        )}
       </div>
       </>
       ) : seriesLoading ? (

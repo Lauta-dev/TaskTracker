@@ -1,11 +1,15 @@
 import { dayKey } from "./dates.js";
 import { parseDuration, parseRows } from "./parse.js";
 import { del, get, set } from "./storage.js";
-import mock from "./mock/data.json";
 
-// Prueba: datos congelados de la API (src/mock/data.json). Solo lectura;
-// el POST sigue yendo a la API real. Poner en false para vivo.
-export const USE_MOCK = false;
+// Dev: datos congelados (src/mock/data.json, solo lectura).
+// Prod: API real. El import dinámico deja el mock fuera del bundle de prod.
+export const USE_MOCK = import.meta.env.DEV;
+let mockCache = null;
+async function mockData() {
+  if (!mockCache) mockCache = (await import("./mock/data.json")).default;
+  return mockCache;
+}
 
 const GAS_ID = import.meta.env?.VITE_GAS_ID || "";
 const API_BASE = GAS_ID ? `https://script.google.com/macros/s/${GAS_ID}/exec` : "";
@@ -67,7 +71,7 @@ export function saveLastSheet(name) {
 export async function listSheets() {
   let api = [];
   if (USE_MOCK) {
-    api = [...(mock.sheets || [])];
+    api = [...((await mockData()).sheets || [])];
   } else {
     try {
       const data = await req(`${API_BASE}?action=getSheet`);
@@ -111,7 +115,7 @@ function pendingToRow(p) {
 export async function getRows(sheet) {
   try {
     const matrix = USE_MOCK
-      ? mock.rows?.[sheet] || []
+      ? (await mockData()).rows?.[sheet] || []
       : await fetchMatrix(sheet);
     const queued = pendingFor(sheet).map(pendingToRow).filter(Boolean);
     return { rows: parseRows(matrix).concat(queued), live: true, error: "" };

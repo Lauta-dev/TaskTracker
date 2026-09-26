@@ -47,4 +47,4 @@ src/
 
 ## Mock
 
-`src/mock/data.json` con datos congelados. `USE_MOCK` en `src/api.js` para probar sin red (solo lectura; el POST va a la API real).
+`src/mock/data.json` con datos congelados. En `dev` se usa el mock (solo lectura; el POST va a la API real), en `build` la API. El pill "mock" del header indica el modo.
