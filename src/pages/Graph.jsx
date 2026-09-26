@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
 import { localSheets, pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
-import { currentMonth, monthCells } from "../dates.js";
+import { currentMonth, dayKey, monthCells } from "../dates.js";
 import { fmtTotal, level } from "../format.js";
 import { resolveSheet } from "../sheet.js";
 import { Sheet } from "../components/ui/sheet";
@@ -54,9 +54,8 @@ export function Graph({ names }) {
     skelLast = i;
   });
   const skelCorner = (i) => [
-    (i === 0 || i === skelFirst) && "rounded-tl-md",
+    (i === skelFirst || (skelFirst > 0 && i === 7)) && "rounded-tl-md",
     i === 6 && "rounded-tr-md",
-    i === 7 && "rounded-tl-md",
     i === skelCells.length - 7 && "rounded-bl-md",
     i === skelCells.length - 1 && "rounded-br-md",
   ].filter(Boolean).join(" ");
@@ -144,12 +143,19 @@ export function Graph({ names }) {
     lastIdx = i;
   });
   const monthTotal = [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
+  const today = dayKey(new Date());
+  // Objetivo: 2h por día × días transcurridos (mes actual) o del mes (otros).
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const isCurrent = y === now.y && m === now.m;
+  const elapsed = isCurrent ? Math.min(new Date().getDate(), daysInMonth) : daysInMonth;
+  const goal = 2 * 3600 * elapsed;
+  const goalPct = Math.min(100, Math.round((monthTotal / goal) * 100));
   // Esquinas redondeadas puntuales de la grilla.
-  // El arriba-izq va al primer día visible (el índice 0 puede ser hueco).
+  // El arriba-izq va al primer día visible; el de la segunda semana solo
+  // si la primera fila no está completa (mes que no arranca lunes).
   const corner = (i) => [
-    (i === 0 || i === firstIdx) && "rounded-tl-md",
+    (i === firstIdx || (firstIdx > 0 && i === 7)) && "rounded-tl-md",
     i === 6 && "rounded-tr-md",
-    i === 7 && "rounded-tl-md",
     i === cells.length - 7 && "rounded-bl-md",
     i === cells.length - 1 && "rounded-br-md",
   ].filter(Boolean).join(" ");
@@ -245,6 +251,7 @@ export function Graph({ names }) {
       )}
 
       {vista !== "tabla" && (vista === "grilla" ? (
+      <>
       <div key="grilla" class="grid grid-cols-7 gap-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
         {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
           <div key={w} class="font-data pb-1 text-center text-[13px] uppercase tracking-widest text-muted-foreground">
@@ -312,7 +319,7 @@ export function Graph({ names }) {
               key={d.key}
               onClick={() => openDay(d.key)}
               title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-              class={`relative aspect-square w-full cursor-pointer overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${corner(i)} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              class={`relative aspect-square w-full cursor-pointer overflow-hidden text-left ${LEVEL_BG[lv]} ${d.key === today ? "rounded-md" : `border border-border ${corner(i)}`} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
             >
               <span class="absolute inset-0 flex flex-col justify-between p-2">
                 <span
@@ -330,6 +337,22 @@ export function Graph({ names }) {
           );
         })}
       </div>
+      <div class="mt-4 rounded-md border border-border bg-card p-3">
+        <div class="flex items-baseline justify-between gap-2">
+          <p class="text-[13px] font-medium">Objetivo · 2h/día</p>
+          <p class="font-data text-[12px] text-muted-foreground">{fmtTotal(monthTotal)} / {fmtTotal(goal)}</p>
+        </div>
+        <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-muted">
+          <div
+            class="h-full rounded-full bg-chart-2 transition-all"
+            style={{ width: goalPct + "%" }}
+          />
+        </div>
+        <p class="font-data mt-1.5 text-[11px] text-muted-foreground">
+          {monthTotal >= goal ? "¡Objetivo cumplido!" : `${goalPct}% · te faltan ${fmtTotal(goal - monthTotal)}`}
+        </p>
+      </div>
+      </>
       ) : seriesLoading ? (
         <div key="barras-loading" aria-hidden="true" class="h-[240px] animate-pulse rounded-md bg-muted" />
       ) : (
@@ -415,7 +438,7 @@ export function Graph({ names }) {
                     <p class="mt-1 text-[14px] font-medium leading-snug">
                       {e.url ? (
                         <a href={e.url} target="_blank" rel="noreferrer" class="underline underline-offset-2">
-                          {e.titulo} ↗
+                          {e.titulo}
                         </a>
                       ) : e.titulo}
                     </p>
