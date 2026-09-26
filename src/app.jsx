@@ -55,6 +55,10 @@ export function App() {
   return (
     <div class="min-h-screen bg-background text-foreground">
       <div class="mx-auto w-full max-w-[680px] px-4 pb-28 pt-8">
+        <header class="mb-5 flex items-center gap-2.5">
+          <img src="/icons.svg" alt="Tinta" class="size-7 rounded-md" />
+          <p class="font-display text-[17px] font-semibold tracking-tight">Tinta</p>
+        </header>
         <div class="grid">
           {views.map((v, i) => (
             <div
