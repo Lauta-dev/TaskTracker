@@ -173,7 +173,7 @@ export function Registro({ onSaved, sheet: sheetProp }) {
         <button
           type="submit"
           disabled={!canSave || sending}
-          class="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground transition-opacity active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          class="h-11 w-full rounded-md bg-chart-2 text-sm font-semibold text-background transition-opacity active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {sending ? "Guardando…" : "Guardar"}
         </button>

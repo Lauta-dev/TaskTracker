@@ -161,7 +161,7 @@ export function Graph({ names }) {
   ].filter(Boolean).join(" ");
   // Intensidad del bloque total: promedio por día activo vs mejor día.
   const monthLv = level(monthTotal > 0 && dayInfo.size > 0 ? monthTotal / (maxSecs * dayInfo.size) : 0);
-  const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-neutral-950" : "text-foreground";
+  const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-background" : "text-foreground";
 
   function openDay(key) {
     setSheetKey(key);
@@ -196,7 +196,7 @@ export function Graph({ names }) {
           onClick={() => setVista("grilla")}
           aria-pressed={vista === "grilla"}
           class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "grilla" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+            vista === "grilla" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
           }`}
         >
           <LayoutGrid class="size-4" /> Grilla
@@ -206,7 +206,7 @@ export function Graph({ names }) {
           onClick={() => setVista("barras")}
           aria-pressed={vista === "barras"}
           class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "barras" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+            vista === "barras" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
           }`}
         >
           <ChartColumn class="size-4" /> Barras
@@ -216,7 +216,7 @@ export function Graph({ names }) {
           onClick={() => setVista("tabla")}
           aria-pressed={vista === "tabla"}
           class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "tabla" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+            vista === "tabla" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
           }`}
         >
           <Table class="size-4" /> Tabla
@@ -239,7 +239,7 @@ export function Graph({ names }) {
                     class="flex cursor-default select-none items-center gap-2.5 rounded-sm px-2 py-2.5 text-[15px]"
                   >
                     <span class={`flex size-4 shrink-0 items-center justify-center rounded border ${on ? "border-chart-2 bg-chart-2" : "border-muted-foreground"}`}>
-                      {on && <Check class="size-3 text-neutral-950" />}
+                      {on && <Check class="size-3 text-background" />}
                     </span>
                     <span class="min-w-0 flex-1 truncate">{n}</span>
                   </div>
@@ -252,9 +252,9 @@ export function Graph({ names }) {
 
       {vista !== "tabla" && (vista === "grilla" ? (
       <>
-      <div key="grilla" class="grid grid-cols-7 gap-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+      <div key="grilla" class="grid grid-cols-7 gap-0 -mx-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
         {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
-          <div key={w} class="font-data pb-1 text-center text-[13px] uppercase tracking-widest text-muted-foreground">
+          <div key={w} class="font-data pb-1 text-center text-[12px] uppercase tracking-widest text-muted-foreground">
             {w}
           </div>
         ))}
@@ -303,7 +303,7 @@ export function Graph({ names }) {
                 class={`relative min-h-full w-full overflow-hidden border border-border ${LEVEL_BG[monthLv]} ${totalCorners}`}
               >
                 <span class="absolute inset-0 flex items-center justify-center p-1.5">
-                  <span class={`font-data text-[16px] font-bold leading-none ${monthTcls}`}>
+                  <span class={`font-data text-[14px] font-bold leading-none ${monthTcls}`}>
                     {fmtTotal(monthTotal)}
                   </span>
                 </span>
@@ -311,28 +311,39 @@ export function Graph({ names }) {
             );
           }
           const lv = level(d.total / maxSecs);
-          // lv 0: apagado · lv 1-2: medios → texto del tema · lv 3-4: brasa viva → texto oscuro fijo
-          const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-neutral-950" : "text-foreground";
+          // lv 0: apagado · lv 1-2: texto del tema · lv 3-4: lleno → texto del fondo
+          const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-background" : "text-foreground";
           return (
             <button
               type="button"
               key={d.key}
               onClick={() => openDay(d.key)}
               title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-              class={`relative aspect-square w-full cursor-pointer overflow-hidden text-left ${LEVEL_BG[lv]} ${d.key === today ? "rounded-md" : `border border-border ${corner(i)}`} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              class={`relative aspect-square w-full cursor-pointer overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${d.key === today ? "" : corner(i)} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
             >
-              <span class="absolute inset-0 flex flex-col justify-between p-2">
-                <span
-                  class={`font-data text-[16px] font-bold leading-none ${tcls}`}
-                >
-                  {d.day}
-                </span>
+              <span class="absolute inset-0 flex flex-col justify-between p-1.5">
+                {d.key === today ? (
+                  <span aria-hidden="true" class="invisible font-data text-[14px] font-bold leading-none">
+                    {d.day}
+                  </span>
+                ) : (
+                  <span class={`font-data text-[14px] font-bold leading-none ${tcls}`}>
+                    {d.day}
+                  </span>
+                )}
                 {d.total > 0 && (
-                    <span class={`font-data text-[13px] font-bold leading-none ${tcls}`}>
+                    <span class={`font-data text-[12px] font-bold leading-none ${tcls}`}>
                     {fmtTotal(d.total)}
                   </span>
                 )}
               </span>
+              {d.key === today && (
+                <span class="absolute left-0 top-0 rounded-br-xl border-b border-r border-chart-2 bg-chart-2 p-1.5">
+                  <span class="block font-data text-[12px] font-bold leading-none text-background sm:text-[14px]">
+                    {d.day}
+                  </span>
+                </span>
+              )}
             </button>
           );
         })}
@@ -385,7 +396,7 @@ export function Graph({ names }) {
                   <td class="px-3 py-2">
                     <p class="font-medium leading-snug">
                       {r.url ? (
-                        <a href={r.url} target="_blank" rel="noreferrer" class="underline underline-offset-2">
+                        <a href={r.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
                           {r.titulo}
                         </a>
                       ) : r.titulo}
@@ -437,7 +448,7 @@ export function Graph({ names }) {
                     </div>
                     <p class="mt-1 text-[14px] font-medium leading-snug">
                       {e.url ? (
-                        <a href={e.url} target="_blank" rel="noreferrer" class="underline underline-offset-2">
+                        <a href={e.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
                           {e.titulo}
                         </a>
                       ) : e.titulo}

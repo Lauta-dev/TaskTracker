@@ -64,7 +64,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
           <button
             type="button"
             onClick={create}
-            class="h-8 shrink-0 rounded-sm bg-primary px-3 text-[13px] font-semibold text-primary-foreground active:opacity-90"
+            class="h-8 shrink-0 rounded-sm bg-chart-2 px-3 text-[13px] font-semibold text-background active:opacity-90"
           >
             Añadir
           </button>

@@ -75,7 +75,7 @@ export function Bars({ series = [] }) {
                       )}
                       <span
                         class={`font-data absolute right-1.5 top-1/2 -translate-y-1/2 whitespace-nowrap font-bold leading-none ${valSize} ${
-                          onSolid ? "text-neutral-950" : ""
+                          onSolid ? "text-background" : ""
                         }`}
                         style={onSolid ? undefined : { color: s.color }}
                       >

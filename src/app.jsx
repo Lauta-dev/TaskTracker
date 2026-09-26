@@ -46,7 +46,7 @@ export function App() {
         onClick={() => setRegOpen(true)}
         title="Registrar"
         aria-label="Registrar"
-        class="fixed bottom-8 right-4 z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform duration-150 active:scale-80"
+        class="fixed bottom-8 right-4 z-40 flex size-14 items-center justify-center rounded-full bg-chart-2 text-background shadow-lg transition-transform duration-150 active:scale-80"
       >
         <Plus class="size-6" />
       </button>
