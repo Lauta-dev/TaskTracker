@@ -7,7 +7,7 @@ import { del, get, set } from "./storage.js";
 export const USE_MOCK = import.meta.env.DEV;
 let mockCache = null;
 async function mockData() {
-  if (!mockCache) mockCache = (await import("./mock/data.json")).default;
+  if (!mockCache) mockCache = (await import("./mock/testings.json")).default;
   return mockCache;
 }
 
@@ -23,17 +23,23 @@ const LAST_KEY = "tt-sheet";
 
 async function req(url, opts) {
   if (!API_BASE) throw new Error("Falta VITE_GAS_ID en el .env");
-  // text/plain evita el preflight CORS que Apps Script no responde.
   const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
 }
 
-async function post(url, body) {
-  return req(url, {
+/* Columnas 1-based de la pestaña. */
+export const COLS = { fecha: 1, habilidad: 2, recurso: 3, contenido: 4, hora: 5, nota: 6 };
+
+/* POST a GAS: aplica aunque responda HTML/estados raros; basta que resuelva.
+   text/plain evita el preflight CORS que Apps Script no responde. */
+async function post(action, body) {
+  if (!API_BASE) throw new Error("Falta VITE_GAS_ID en el .env");
+  await fetch(`${API_BASE}?action=${action}`, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
 }
 
@@ -74,7 +80,7 @@ export async function listSheets() {
     api = [...((await mockData()).sheets || [])];
   } else {
     try {
-      const data = await req(`${API_BASE}?action=getSheet`);
+      const data = await req(`${API_BASE}?action=GETSHEETS`);
       const names = Array.isArray(data) ? data : data?.sheets || [];
       api = names.filter((n) => typeof n === "string");
     } catch {
@@ -125,7 +131,7 @@ export async function getRows(sheet) {
 }
 
 async function fetchMatrix(sheet) {
-  const data = await req(`${API_BASE}?sheet=${encodeURIComponent(sheet)}`);
+  const data = await req(`${API_BASE}?action=GETROWS&sheet=${encodeURIComponent(sheet)}`);
   return Array.isArray(data) ? data : data?.rows || data?.data || [];
 }
 
@@ -133,7 +139,7 @@ async function fetchMatrix(sheet) {
 
 export async function postEntry(entry) {
   try {
-    await post(API_BASE, entry);
+    await post("CREATE", entry);
     await retryPending();
     return "sent";
   } catch {
@@ -147,13 +153,25 @@ export async function retryPending() {
   const rest = [];
   for (const p of pending()) {
     try {
-      await post(API_BASE, p);
+      await post("CREATE", p);
     } catch {
       rest.push(p);
     }
   }
   set(PENDING_KEY, rest);
   return rest.length;
+}
+
+/** Actualiza celdas: changes = [{ col (1-based), newValue }]. Lanza si falla. */
+export async function updateCells(sheet, row, changes) {
+  for (const c of changes) {
+    await post("UPDATE", { sheet, row, col: c.col, newValue: c.newValue });
+  }
+}
+
+/** Borra una fila por índice 1-based. Lanza si falla. */
+export async function deleteRowApi(sheet, row) {
+  await post("DELETE", { sheet, row });
 }
 
 export function pendingCount(sheet) {

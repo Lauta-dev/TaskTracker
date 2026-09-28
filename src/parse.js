@@ -32,7 +32,9 @@ export function parseRows(m) {
     }
     const secs = parseSheetDuration(row[4]);
     const notas = row[5] ? String(row[5]) : "";
-    out.push({ key, secs, habilidad, recurso, titulo, url, notas });
+    // sheetRow: índice 1-based en la pestaña (para UPDATE/DELETE). Null si no viene.
+    const num = typeof row[6] === "number" ? row[6] : null;
+    out.push({ key, secs, habilidad, recurso, titulo, url, notas, row: num });
   }
   return out;
 }

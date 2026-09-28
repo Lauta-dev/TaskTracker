@@ -4,7 +4,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import { DatePicker } from "../components/ui/date-picker";
-import { postEntry } from "../api.js";
+import { COLS, postEntry, updateCells } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { parseDuration } from "../parse.js";
 import { dayKey } from "../dates.js";
@@ -19,7 +19,7 @@ const label =
 const DEFAULT_HABS = ["Listening", "Vocabulary", "Reading", "Grammar"];
 const DEFAULT_RECS = ["Anki", "YT", "Serie", "Anime", "Movie"];
 
-export function Registro({ onSaved, sheet: sheetProp }) {
+export function Registro({ onSaved, sheet: sheetProp, editing }) {
   const [, navigate] = useLocation();
   const search = useSearch();
   const sheet = sheetProp || sheetFromSearch(search);
@@ -28,13 +28,13 @@ export function Registro({ onSaved, sheet: sheetProp }) {
   const habs = [...new Set([...DEFAULT_HABS, ...(rows || []).map((r) => r.habilidad)])];
   const recs = [...new Set([...DEFAULT_RECS, ...(rows || []).map((r) => r.recurso)])];
 
-  const [dia, setDia] = useState(dayKey(new Date()));
-  const [habilidad, setHabilidad] = useState(habs[0]);
-  const [recurso, setRecurso] = useState(recs[0]);
-  const [duracion, setDuracion] = useState("");
-  const [contenido, setContenido] = useState("");
-  const [url, setUrl] = useState("");
-  const [nota, setNota] = useState("");
+  const [dia, setDia] = useState(editing?.key || dayKey(new Date()));
+  const [habilidad, setHabilidad] = useState(editing?.habilidad || habs[0]);
+  const [recurso, setRecurso] = useState(editing?.recurso || recs[0]);
+  const [duracion, setDuracion] = useState(editing ? fmtTotal(editing.secs || 0) : "");
+  const [contenido, setContenido] = useState(editing?.titulo || "");
+  const [url, setUrl] = useState(editing?.url || "");
+  const [nota, setNota] = useState(editing?.notas || "");
   const [submitError, setSubmitError] = useState("");
   const [queuedMsg, setQueuedMsg] = useState("");
   const [sending, setSending] = useState(false);
@@ -55,6 +55,27 @@ export function Registro({ onSaved, sheet: sheetProp }) {
     if (!contenido.trim()) return setSubmitError("Poné qué hiciste en Contenido.");
     const finalUrl = normalizeUrl(url);
     setSending(true);
+    // Edición: UPDATE solo las columnas que cambiaron.
+    if (editing?.row) {
+      const changes = [];
+      if (dia !== editing.key) changes.push({ col: COLS.fecha, newValue: `${dia}T12:00:00.000Z` });
+      if (habilidad !== editing.habilidad) changes.push({ col: COLS.habilidad, newValue: habilidad });
+      if (recurso !== editing.recurso) changes.push({ col: COLS.recurso, newValue: recurso });
+      if (contenido.trim() !== editing.titulo || finalUrl !== editing.url) {
+        changes.push({ col: COLS.contenido, newValue: { title: contenido.trim(), url: finalUrl } });
+      }
+      if (parsed.secs !== editing.secs) changes.push({ col: COLS.hora, newValue: secsToHMS(parsed.secs) });
+      if (nota.trim() !== (editing.notas || "")) changes.push({ col: COLS.nota, newValue: nota.trim() });
+      updateCells(sheet, editing.row, changes).then(() => {
+        window.dispatchEvent(new Event("tt:rows"));
+        if (onSaved) onSaved();
+        else navigate(`/?sheet=${encodeURIComponent(sheet)}`);
+      }).catch(() => {
+        setSending(false);
+        setSubmitError("Sin conexión: no se pudo guardar el cambio.");
+      });
+      return;
+    }
     postEntry({
       fecha: `${dia}T12:00:00.000Z`,
       habilidad,
@@ -90,7 +111,7 @@ export function Registro({ onSaved, sheet: sheetProp }) {
   return (
     <div>
       <div class="mb-4">
-        <h1 class="font-display text-[24px] font-semibold leading-tight">Registrar</h1>
+        <h1 class="font-display text-[24px] font-semibold leading-tight">{editing ? "Editar" : "Registrar"}</h1>
         <p class="mt-0.5 text-[14px] text-muted-foreground">{sheet}</p>
       </div>
 
@@ -175,7 +196,7 @@ export function Registro({ onSaved, sheet: sheetProp }) {
           disabled={!canSave || sending}
           class="h-11 w-full rounded-md bg-chart-2 text-sm font-semibold text-background transition-opacity active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {sending ? "Guardando…" : "Guardar"}
+          {sending ? "Guardando…" : editing ? "Guardar cambios" : "Guardar"}
         </button>
       </form>
     </div>

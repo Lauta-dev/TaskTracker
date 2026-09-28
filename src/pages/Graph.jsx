@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { localSheets, pendingCount, saveLastSheet } from "../api.js";
+import { deleteRowApi, localSheets, pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { currentMonth, dayKey, monthCells } from "../dates.js";
 import { fmtTotal, level } from "../format.js";
@@ -9,7 +9,7 @@ import { Sheet } from "../components/ui/sheet";
 import { Stats } from "../components/Stats";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Bars } from "../components/Bars";
-import { ChartColumn, Check, LayoutGrid, Table } from "lucide-preact";
+import { ChartColumn, Check, LayoutGrid, Pencil, Table, Trash2 } from "lucide-preact";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
 const LEVEL_BG = [
@@ -20,16 +20,33 @@ const LEVEL_BG = [
   "bg-chart-2",
 ];
 
-export function Graph({ names }) {
+export function Graph({ names, onEdit }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
   const [sheetKey, setSheetKey] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [vista, setVista] = useState("grilla");
+  const [rowError, setRowError] = useState("");
 
   const list = names || [];
   const sheet = resolveSheet(search, list);
   const { rows: apiRows, live, error, retry } = useRows(sheet);
+
+  function editRow(r) {
+    setRowError("");
+    onEdit?.({ sheet, row: r.row, key: r.key, secs: r.secs, habilidad: r.habilidad, recurso: r.recurso, titulo: r.titulo, url: r.url, notas: r.notas });
+  }
+
+  async function removeRow(r) {
+    if (!window.confirm(`¿Eliminar "${r.titulo}"?`)) return;
+    setRowError("");
+    try {
+      await deleteRowApi(sheet, r.row);
+      window.dispatchEvent(new Event("tt:rows"));
+    } catch {
+      setRowError("Sin conexión: no se pudo eliminar.");
+    }
+  }
 
   // URL predecible: si no hay ?sheet= o apunta a una hoja que no existe,
   // se fija al resuelto. Solo en "/" — si la vista está saliendo, no secuestrar.
@@ -353,6 +370,7 @@ export function Graph({ names }) {
 
       {vista === "tabla" && (
       <div key="tabla" class="mt-6 overflow-hidden rounded-md border border-border animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+        {rowError && <p class="border-b border-border px-4 py-2 text-sm text-destructive">{rowError}</p>}
         {apiRows === null ? (
           <div class="space-y-2 p-3" aria-hidden="true">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -366,6 +384,7 @@ export function Graph({ names }) {
                 <th class="w-10 px-3 py-2 font-medium">Día</th>
                 <th class="px-3 py-2 font-medium">Actividad</th>
                 <th class="w-20 px-3 py-2 text-right font-medium">Tiempo</th>
+                <th class="w-[54px] px-2 py-2"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
@@ -384,6 +403,26 @@ export function Graph({ names }) {
                   </td>
                   <td class="whitespace-nowrap px-3 py-2 text-right font-data font-semibold">
                     {r.secs > 0 ? fmtTotal(r.secs) : "—"}
+                  </td>
+                  <td class="whitespace-nowrap px-2 py-2 text-right">
+                    {r.row ? (
+                      <span class="inline-flex gap-1">
+                        <button
+                          type="button" title="Editar" aria-label={`Editar ${r.titulo}`}
+                          onClick={() => editRow(r)}
+                          class="rounded p-1 text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil class="size-4" />
+                        </button>
+                        <button
+                          type="button" title="Eliminar" aria-label={`Eliminar ${r.titulo}`}
+                          onClick={() => removeRow(r)}
+                          class="rounded p-1 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 class="size-4" />
+                        </button>
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -421,8 +460,28 @@ export function Graph({ names }) {
                       <span class="font-data text-[11px] text-muted-foreground">
                         {e.habilidad} · {e.recurso}
                       </span>
-                      <span class="font-data text-[12px] font-semibold">
-                        {e.secs > 0 ? fmtTotal(e.secs) : "—"}
+                      <span class="inline-flex items-center gap-1">
+                        <span class="font-data text-[12px] font-semibold">
+                          {e.secs > 0 ? fmtTotal(e.secs) : "—"}
+                        </span>
+                        {e.row ? (
+                          <>
+                            <button
+                              type="button" title="Editar" aria-label={`Editar ${e.titulo}`}
+                              onClick={() => { setSheetOpen(false); editRow(e); }}
+                              class="rounded p-1 text-muted-foreground hover:text-foreground"
+                            >
+                              <Pencil class="size-4" />
+                            </button>
+                            <button
+                              type="button" title="Eliminar" aria-label={`Eliminar ${e.titulo}`}
+                              onClick={() => removeRow(e)}
+                              class="rounded p-1 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 class="size-4" />
+                            </button>
+                          </>
+                        ) : null}
                       </span>
                     </div>
                     <p class="mt-1 text-[14px] font-medium leading-snug">

@@ -15,9 +15,30 @@ export function App() {
   const sheets = useSheets();
   // Prueba: FAB que abre el Registro en modal.
   const [regOpen, setRegOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   // La lista se pide una sola vez acá y baja por props.
   const sheet = resolveSheet(search, sheets.names || []);
+
+  function pick(name) {
+    saveLastSheet(name);
+    navigate(`/?sheet=${encodeURIComponent(name)}`);
+  }
+
+  function openNew() {
+    setEditing(null);
+    setRegOpen(true);
+  }
+
+  function openEdit(entry) {
+    setEditing(entry);
+    setRegOpen(true);
+  }
+
+  function closeReg() {
+    setRegOpen(false);
+    setEditing(null);
+  }
 
   function pick(name) {
     saveLastSheet(name);
@@ -39,19 +60,19 @@ export function App() {
           </div>
           <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
         </header>
-        <Graph names={sheets.names} />
+        <Graph names={sheets.names} onEdit={openEdit} />
       </div>
       <button
         type="button"
-        onClick={() => setRegOpen(true)}
+        onClick={openNew}
         title="Registrar"
         aria-label="Registrar"
         class="fixed bottom-8 right-4 z-40 flex size-14 items-center justify-center rounded-full bg-chart-2 text-background shadow-lg transition-transform duration-150 active:scale-80"
       >
         <Plus class="size-6" />
       </button>
-      <Modal open={regOpen} onClose={() => setRegOpen(false)} label="Registrar">
-        <Registro sheet={sheet} onSaved={() => setRegOpen(false)} />
+      <Modal open={regOpen} onClose={closeReg} label={editing ? "Editar" : "Registrar"}>
+        {regOpen && <Registro key={editing?.row || "new"} sheet={sheet} editing={editing} onSaved={closeReg} />}
       </Modal>
     </div>
   );
