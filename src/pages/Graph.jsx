@@ -6,6 +6,15 @@ import { currentMonth, dayKey, monthCells } from "../dates.js";
 import { fmtTotal, level } from "../format.js";
 import { resolveSheet } from "../sheet.js";
 import { Sheet } from "../components/ui/sheet";
+import { DropdownMenu, DropdownMenuItem } from "../components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { Stats } from "../components/Stats";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Bars } from "../components/Bars";
@@ -27,6 +36,8 @@ export function Graph({ names, onEdit }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [vista, setVista] = useState("grilla");
   const [rowError, setRowError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const list = names || [];
   const sheet = resolveSheet(search, list);
@@ -37,14 +48,25 @@ export function Graph({ names, onEdit }) {
     onEdit?.({ sheet, row: r.row, key: r.key, secs: r.secs, habilidad: r.habilidad, recurso: r.recurso, titulo: r.titulo, url: r.url, notas: r.notas });
   }
 
-  async function removeRow(r) {
-    if (!window.confirm(`¿Eliminar "${r.titulo}"?`)) return;
+  function askDelete(r) {
+    setRowError("");
+    setPendingDelete(r);
+  }
+
+  async function confirmDelete() {
+    const r = pendingDelete;
+    if (!r) return;
+    setDeleting(true);
     setRowError("");
     try {
       await deleteRowApi(sheet, r.row);
+      setPendingDelete(null);
       window.dispatchEvent(new Event("tt:rows"));
     } catch {
+      setPendingDelete(null);
       setRowError("Sin conexión: no se pudo eliminar.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -261,7 +283,7 @@ export function Graph({ names, onEdit }) {
 
       {vista !== "tabla" && (vista === "grilla" ? (
       <>
-      <div key="grilla" class="grid grid-cols-7 gap-0 -mx-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+      <div key="grilla" class="grid grid-cols-7 gap-0 -mx-2 sm:-mx-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
         {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
           <div key={w} class="font-data pb-1 text-center text-[12px] uppercase tracking-widest text-muted-foreground">
             {w}
@@ -384,7 +406,7 @@ export function Graph({ names, onEdit }) {
                 <th class="w-10 px-3 py-2 font-medium">Día</th>
                 <th class="px-3 py-2 font-medium">Actividad</th>
                 <th class="w-20 px-3 py-2 text-right font-medium">Tiempo</th>
-                <th class="w-[54px] px-2 py-2"></th>
+                <th class="w-[60px] px-2 py-2"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
@@ -404,24 +426,16 @@ export function Graph({ names, onEdit }) {
                   <td class="whitespace-nowrap px-3 py-2 text-right font-data font-semibold">
                     {r.secs > 0 ? fmtTotal(r.secs) : "—"}
                   </td>
-                  <td class="whitespace-nowrap px-2 py-2 text-right">
+                  <td class="whitespace-nowrap py-2 pl-4 pr-2 text-right">
                     {r.row ? (
-                      <span class="inline-flex gap-1">
-                        <button
-                          type="button" title="Editar" aria-label={`Editar ${r.titulo}`}
-                          onClick={() => editRow(r)}
-                          class="rounded p-1 text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil class="size-4" />
-                        </button>
-                        <button
-                          type="button" title="Eliminar" aria-label={`Eliminar ${r.titulo}`}
-                          onClick={() => removeRow(r)}
-                          class="rounded p-1 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 class="size-4" />
-                        </button>
-                      </span>
+                      <DropdownMenu label={`Opciones de ${r.titulo}`}>
+                        <DropdownMenuItem onClick={() => editRow(r)}>
+                          <Pencil class="size-5" /> Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem destructive onClick={() => askDelete(r)}>
+                          <Trash2 class="size-5" /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenu>
                     ) : null}
                   </td>
                 </tr>
@@ -454,44 +468,46 @@ export function Graph({ names, onEdit }) {
                 {sel.entries.map((e, idx) => (
                   <li
                     key={idx}
-                    class={`mt-2 bg-muted px-4 py-3 ${idx === sel.entries.length - 1 ? "rounded-b-2xl" : ""}`}
+                    class={`mt-2 bg-muted px-3 py-2 ${idx === sel.entries.length - 1 ? "rounded-b-2xl" : ""}`}
                   >
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="font-data text-[11px] text-muted-foreground">
-                        {e.habilidad} · {e.recurso}
-                      </span>
-                      <span class="inline-flex items-center gap-1">
-                        <span class="font-data text-[12px] font-semibold">
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="min-w-0">
+                        <p class="truncate text-[13px] font-medium leading-snug">
+                          {(() => {
+                            const t = e.titulo || "";
+                            const cortado = t.length > 36;
+                            const visible = cortado ? t.slice(0, 36).trimEnd() : t;
+                            return (
+                              <>
+                                {e.url ? (
+                                  <a href={e.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
+                                    {visible}
+                                  </a>
+                                ) : visible}
+                                {cortado && <span class="text-muted-foreground">…</span>}
+                              </>
+                            );
+                          })()}
+                        </p>
+                        <p class="font-data text-[11px] text-muted-foreground">{e.habilidad} · {e.recurso}</p>
+                        {e.notas && <p class="font-data mt-0.5 text-[11px] text-muted-foreground">{e.notas}</p>}
+                      </div>
+                      <span class="inline-flex shrink-0 items-center gap-3">
+                        <span class="w-14 shrink-0 text-right font-data text-[12px] font-semibold">
                           {e.secs > 0 ? fmtTotal(e.secs) : "—"}
                         </span>
                         {e.row ? (
-                          <>
-                            <button
-                              type="button" title="Editar" aria-label={`Editar ${e.titulo}`}
-                              onClick={() => { setSheetOpen(false); editRow(e); }}
-                              class="rounded p-1 text-muted-foreground hover:text-foreground"
-                            >
-                              <Pencil class="size-4" />
-                            </button>
-                            <button
-                              type="button" title="Eliminar" aria-label={`Eliminar ${e.titulo}`}
-                              onClick={() => removeRow(e)}
-                              class="rounded p-1 text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 class="size-4" />
-                            </button>
-                          </>
+                          <DropdownMenu label={`Opciones de ${e.titulo}`}>
+                            <DropdownMenuItem onClick={() => { setSheetOpen(false); editRow(e); }}>
+                              <Pencil class="size-5" /> Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem destructive onClick={() => { setSheetOpen(false); askDelete(e); }}>
+                              <Trash2 class="size-5" /> Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenu>
                         ) : null}
                       </span>
                     </div>
-                    <p class="mt-1 text-[14px] font-medium leading-snug">
-                      {e.url ? (
-                        <a href={e.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
-                          {e.titulo}
-                        </a>
-                      ) : e.titulo}
-                    </p>
-                    {e.notas && <p class="font-data mt-1 text-[11px] text-muted-foreground">{e.notas}</p>}
                   </li>
                 ))}
               </ul>
@@ -501,6 +517,25 @@ export function Graph({ names, onEdit }) {
           </div>
         )}
       </Sheet>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(v) => { if (!v && !deleting) setPendingDelete(null); }}
+        label="Eliminar registro"
+      >
+        <AlertDialogTitle>Eliminar registro</AlertDialogTitle>
+        <AlertDialogDescription>
+          {pendingDelete ? `¿Eliminar "${pendingDelete.titulo}"? Esta acción no se puede deshacer.` : ""}
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setPendingDelete(null)}>
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction destructive disabled={deleting} onClick={confirmDelete}>
+            {deleting ? "Eliminando…" : "Eliminar"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialog>
     </div>
   );
 }

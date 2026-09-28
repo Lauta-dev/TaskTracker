@@ -7,7 +7,7 @@ import { del, get, set } from "./storage.js";
 export const USE_MOCK = import.meta.env.DEV;
 let mockCache = null;
 async function mockData() {
-  if (!mockCache) mockCache = (await import("./mock/testings.json")).default;
+  if (!mockCache) mockCache = (await import("./mock/data.json")).default;
   return mockCache;
 }
 
