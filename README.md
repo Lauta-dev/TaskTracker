@@ -25,9 +25,15 @@ cp .env.example .env   # si existe, o crealo con:
 ```
 
 ```bash
-npm run dev      # desarrollo (reiniciar si cambia el .env)
-npm run build    # producción a dist/
+npm run dev      # desarrollo con VITE_GAS_ID del .env (reiniciar si cambia)
+npm run build    # producción a dist/ con GAS_ID del entorno
 npm run preview  # probar el build
+```
+
+```bash
+# .env (solo dev)
+VITE_GAS_ID=<id del deployment>
+# prod: exportar GAS_ID=<id> antes del build (o en la plataforma)
 ```
 
 ## Estructura

@@ -11,7 +11,9 @@ async function mockData() {
   return mockCache;
 }
 
-const GAS_ID = import.meta.env?.VITE_GAS_ID || "";
+const GAS_ID = import.meta.env.PROD
+  ? __GAS_ID__
+  : import.meta.env?.VITE_GAS_ID || "";
 const API_BASE = GAS_ID ? `https://script.google.com/macros/s/${GAS_ID}/exec` : "";
 
 // Solo nombres creados acá; las filas viven en la API.
