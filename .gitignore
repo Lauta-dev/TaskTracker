@@ -13,6 +13,8 @@ dist-ssr
 *.local
 .dev.vars
 .wrangler/
+# Aprobaciones de builds de pnpm: solo entorno local (en Cloudflare rompe el install).
+server/pnpm-workspace.yaml
 
 # Editor directories and files
 .vscode/*
