@@ -10,6 +10,11 @@ async function mockData() {
   if (!mockCache) mockCache = (await import("./mock/data.json")).default;
   return mockCache;
 }
+let monthlyCache = null;
+async function monthlyMock() {
+  if (!monthlyCache) monthlyCache = (await import("./mock/monthly.json")).default;
+  return monthlyCache;
+}
 
 const GAS_ID = import.meta.env.PROD
   ? __GAS_ID__
@@ -82,7 +87,7 @@ export async function listSheets() {
     api = [...((await mockData()).sheets || [])];
   } else {
     try {
-      const data = await req(`${API_BASE}?action=GETSHEETS`);
+      const data = await req(`${API_BASE}?action=GET_SHEETS`);
       const names = Array.isArray(data) ? data : data?.sheets || [];
       api = names.filter((n) => typeof n === "string");
     } catch {
@@ -90,6 +95,29 @@ export async function listSheets() {
     }
   }
   return [...new Set([...api, ...localSheets()])];
+}
+
+/** Etiqueta corta para el pie: "Inglés - 2026 Septiembre" → "Septiembre". */
+function shortMonth(name) {
+  const t = String(name || "").trim();
+  const after = t.includes(" - ") ? t.split(" - ").pop().trim() : t;
+  const parts = after.split(/\s+/);
+  return parts[parts.length - 1] || t;
+}
+
+/** Totales por mes para el pie. Dev: mock. Prod: GET_ROWS_FROM_ALL_SHEETS. */
+export async function getMonthlyTotals() {
+  if (USE_MOCK) {
+    const m = await monthlyMock();
+    return Array.isArray(m) ? m.filter((d) => d && typeof d.total === "number") : [];
+  }
+  const data = await req(`${API_BASE}?action=GET_ROWS_FROM_ALL_SHEETS`);
+  const out = [];
+  for (const [name, matrix] of Object.entries(data || {})) {
+    const total = parseRows(matrix).reduce((a, r) => a + (r.secs || 0), 0);
+    if (total > 0) out.push({ month: name, label: shortMonth(name), total });
+  }
+  return out.sort((a, b) => a.label.localeCompare(b.label, "es"));
 }
 
 /* ---------- filas: siempre frescas de la API ---------- */
@@ -133,7 +161,7 @@ export async function getRows(sheet) {
 }
 
 async function fetchMatrix(sheet) {
-  const data = await req(`${API_BASE}?action=GETROWS&sheet=${encodeURIComponent(sheet)}`);
+  const data = await req(`${API_BASE}?action=GET_ROW_BY_SHEET&sheet=${encodeURIComponent(sheet)}`);
   return Array.isArray(data) ? data : data?.rows || data?.data || [];
 }
 
@@ -141,7 +169,7 @@ async function fetchMatrix(sheet) {
 
 export async function postEntry(entry) {
   try {
-    await post("CREATE", entry);
+    await post("POST_CREATE", entry);
     await retryPending();
     return "sent";
   } catch {
@@ -155,7 +183,7 @@ export async function retryPending() {
   const rest = [];
   for (const p of pending()) {
     try {
-      await post("CREATE", p);
+      await post("POST_CREATE", p);
     } catch {
       rest.push(p);
     }
@@ -167,13 +195,13 @@ export async function retryPending() {
 /** Actualiza celdas: changes = [{ col (1-based), newValue }]. Lanza si falla. */
 export async function updateCells(sheet, row, changes) {
   for (const c of changes) {
-    await post("UPDATE", { sheet, row, col: c.col, newValue: c.newValue });
+    await post("POST_UPDATE", { sheet, row, col: c.col, newValue: c.newValue });
   }
 }
 
 /** Borra una fila por índice 1-based. Lanza si falla. */
 export async function deleteRowApi(sheet, row) {
-  await post("DELETE", { sheet, row });
+  await post("POST_DELETE", { sheet, row });
 }
 
 export function pendingCount(sheet) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { deleteRowApi, localSheets, pendingCount, saveLastSheet } from "../api.js";
+import { deleteRowApi, getMonthlyTotals, localSheets, pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { currentMonth, dayKey, monthCells } from "../dates.js";
 import { fmtTotal, level } from "../format.js";
@@ -18,7 +18,8 @@ import {
 import { Stats } from "../components/Stats";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Bars } from "../components/Bars";
-import { ChartColumn, Check, LayoutGrid, Pencil, Table, Trash2 } from "lucide-preact";
+import { Pie } from "../components/Pie";
+import { ChartColumn, ChartPie, Check, LayoutGrid, Pencil, Table, Trash2 } from "lucide-preact";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
 const LEVEL_BG = [
@@ -35,6 +36,7 @@ export function Graph({ names, onEdit }) {
   const [sheetKey, setSheetKey] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [vista, setVista] = useState("grilla");
+  const [monthly, setMonthly] = useState(null);
   const [rowError, setRowError] = useState("");
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -81,6 +83,19 @@ export function Graph({ names, onEdit }) {
       navigate(`/?sheet=${encodeURIComponent(sheet)}`, { replace: true });
     }
   }, [path, names, sheet, search ]);
+
+  // Totales por mes para el pie: mock en dev, API en prod.
+  useEffect(() => {
+    let alive = true;
+    getMonthlyTotals().then((m) => {
+      if (alive) setMonthly(m);
+    }).catch(() => {
+      if (alive) setMonthly([]);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Mes a mostrar: el más reciente entre las filas (la hoja define su mes);
   // si no hay filas, el actual del dispositivo.
@@ -244,6 +259,16 @@ export function Graph({ names, onEdit }) {
         </button>
         <button
           type="button"
+          onClick={() => setVista("pastel")}
+          aria-pressed={vista === "pastel"}
+          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            vista === "pastel" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
+          }`}
+        >
+          <ChartPie class="size-4" /> Pastel
+        </button>
+        <button
+          type="button"
           onClick={() => setVista("tabla")}
           aria-pressed={vista === "tabla"}
           class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
@@ -281,7 +306,7 @@ export function Graph({ names, onEdit }) {
         </div>
       )}
 
-      {vista !== "tabla" && (vista === "grilla" ? (
+      {vista !== "tabla" && vista !== "pastel" && (vista === "grilla" ? (
       <>
       <div key="grilla" class="grid grid-cols-7 gap-0 -mx-2 sm:-mx-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
         {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
@@ -389,6 +414,23 @@ export function Graph({ names, onEdit }) {
           <Bars series={series} />
         </div>
       ))}
+
+      {vista === "pastel" && (
+        <div key="pastel" class="animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+          {monthly === null ? (
+            <div aria-hidden="true" class="rounded-md border border-border bg-card px-4 py-4">
+              <div class="mx-auto size-[220px] animate-pulse rounded-full bg-muted" />
+              <div class="mt-3 space-y-1">
+                {[0, 1, 2].map((i) => (
+                  <div key={"p" + i} class="h-9 animate-pulse rounded-sm bg-muted" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Pie data={monthly} />
+          )}
+        </div>
+      )}
 
       {vista === "tabla" && (
       <div key="tabla" class="mt-6 overflow-hidden rounded-md border border-border animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
