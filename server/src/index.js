@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { MSG } from "./constants.js";
+import { API_DOCS } from "./docs.js";
 import { fail, STATUS } from "./http.js";
 import entries from "./routes/entries.js";
 import rows from "./routes/rows.js";
@@ -12,6 +13,7 @@ const app = new Hono();
 app.use("*", cors());
 
 app.get("/health", (c) => c.json({ ok: true }));
+app.get("/docs", (c) => c.json(API_DOCS));
 
 app.route("/sheets", sheets);
 app.route("/entries", entries);
