@@ -1,0 +1,9 @@
+name = "tasktracker-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# D1 local = .wrangler/ (wrangler dev). Remota = dashboard / --remote.
+[[d1_databases]]
+binding = "DB"
+database_name = "english"
+database_id = "e023370e-570f-4306-9d5e-e86ade12ea36"

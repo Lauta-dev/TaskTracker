@@ -1,0 +1,15 @@
+{
+  "name": "tasktracker-api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.0"
+  }
+}

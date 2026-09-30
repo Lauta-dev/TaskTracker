@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:server": "pnpm --dir server dev",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -39,8 +39,8 @@ export function parseRows(m) {
   return out;
 }
 
-// Duración de planilla: "H:MM:SS" | "MM:SS" | "N min" | "N" | "".
-function parseSheetDuration(v) {
+// Duración de planilla/API: "H:MM:SS" | "MM:SS" | "N min" | "N" | "".
+export function parseSheetDuration(v) {
   if (v === null || v === undefined) return 0;
   const s = String(v).trim();
   if (s === "") return 0;

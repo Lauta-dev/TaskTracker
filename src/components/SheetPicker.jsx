@@ -8,18 +8,18 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
   const list = names || [];
   const locals = localSheets();
 
-  function create() {
+  async function create() {
     const clean = newName.trim();
     if (!clean) return;
-    if (!createSheet(clean)) return;
+    if (!(await createSheet(clean))) return;
     setNewName("");
     onListChanged();
     onPick(clean);
   }
 
-  function removeLocal(name) {
+  async function removeLocal(name) {
     if (!window.confirm(`¿Eliminar "${name}" de este dispositivo?`)) return;
-    deleteSheet(name);
+    await deleteSheet(name);
     onListChanged();
   }
 

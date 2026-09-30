@@ -1,10 +1,37 @@
 import { dayKey } from "./dates.js";
-import { parseDuration, parseRows } from "./parse.js";
+import { parseDuration, parseRows, parseSheetDuration } from "./parse.js";
 import { del, get, set } from "./storage.js";
 
-// Dev: datos congelados (src/mock/data.json, solo lectura).
-// Prod: API real. El import dinámico deja el mock fuera del bundle de prod.
-export const USE_MOCK = import.meta.env.DEV;
+/* Cliente de la API REST (Hono + D1). Un solo lugar para base,
+   endpoints, campos y estados: nada de strings sueltos abajo. */
+const API_BASE = import.meta.env?.VITE_API_BASE || "";
+
+const EP = Object.freeze({
+  SHEETS: "/sheets",
+  ENTRIES: "/entries",
+  ROWS: "/rows",
+});
+
+/* Campos del POST/PATCH (los que acepta el backend). */
+const F = Object.freeze({
+  SHEET: "sheet",
+  SHEET_ID: "sheetId",
+  DATE: "date",
+  TYPE: "type",
+  SOURCE: "source",
+  CONTENT: "content",
+  DURATION: "duration",
+  NOTE: "note",
+  URL: "url",
+});
+
+const QP = Object.freeze({ SHEET: "sheet" });
+
+/* Resultado de postEntry: lo consume Registro ("queued" muestra aviso). */
+const SEND = Object.freeze({ SENT: "sent", QUEUED: "queued" });
+
+// Mock de respaldo: VITE_USE_MOCK=1 en el .env (y reiniciar).
+export const USE_MOCK = import.meta.env?.VITE_USE_MOCK === "1";
 let mockCache = null;
 async function mockData() {
   if (!mockCache) mockCache = (await import("./mock/data.json")).default;
@@ -16,38 +43,92 @@ async function monthlyMock() {
   return monthlyCache;
 }
 
-const GAS_ID = import.meta.env.PROD
-  ? __GAS_ID__
-  : import.meta.env?.VITE_GAS_ID || "";
-const API_BASE = GAS_ID ? `https://script.google.com/macros/s/${GAS_ID}/exec` : "";
-
 // Solo nombres creados acá; las filas viven en la API.
 const SHEETS_KEY = "tt-sheets";
 // Entradas cuyo POST falló; se reintentan después.
-const PENDING_KEY = "tt-pending";
+// v2: payloads REST (la v1 con forma GAS quedó obsoleta en la migración).
+const PENDING_KEY = "tt-pending-v2";
 // Última hoja usada.
 const LAST_KEY = "tt-sheet";
 
-async function req(url, opts) {
-  if (!API_BASE) throw new Error("Falta VITE_GAS_ID en el .env");
-  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-/* Columnas 1-based de la pestaña. */
+/* Fetch JSON con timeout + reintentos. El error del backend ({error})
+   se propaga como mensaje para mostrarlo tal cual. */
+async function req(path, { method = "GET", body } = {}, { timeout = 15000, retries = 2 } = {}) {
+  if (!API_BASE) throw new Error("Falta VITE_API_BASE en el .env");
+  let last;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeout),
+      });
+      if (!res.ok) {
+        let msg = "HTTP " + res.status;
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch {
+          // cuerpo no-JSON: queda el HTTP status
+        }
+        const err = new Error(msg);
+        err.status = res.status;
+        if (res.status >= 500 && attempt < retries) {
+          await sleep(1000 * (attempt + 1));
+          continue;
+        }
+        throw err;
+      }
+      return res.json();
+    } catch (e) {
+      last = e;
+      if (e?.status) throw e;
+      const retryable = e?.name === "TimeoutError" || e?.name === "AbortError" || e instanceof TypeError;
+      if (retryable && attempt < retries) {
+        await sleep(1000 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw last;
+}
+
+/* Columnas 1-based históricas (las usa Registro para armar changes). */
 export const COLS = { fecha: 1, habilidad: 2, recurso: 3, contenido: 4, hora: 5, nota: 6 };
 
-/* POST a GAS: aplica aunque responda HTML/estados raros; basta que resuelva.
-   text/plain evita el preflight CORS que Apps Script no responde. */
-async function post(action, body) {
-  if (!API_BASE) throw new Error("Falta VITE_GAS_ID en el .env");
-  await fetch(`${API_BASE}?action=${action}`, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15000),
-  });
+/* Columna -> campo del PATCH. Contenido puede traer {title, url}. */
+const FIELD_BY_COL = Object.freeze({
+  [COLS.fecha]: F.DATE,
+  [COLS.habilidad]: F.TYPE,
+  [COLS.recurso]: F.SOURCE,
+  [COLS.contenido]: F.CONTENT,
+  [COLS.hora]: F.DURATION,
+  [COLS.nota]: F.NOTE,
+});
+
+/* Fila del backend -> fila normalizada de la grilla.
+   row = id D1: es lo que Editar/Borrar mandan de vuelta. */
+function normalizeEntry(e) {
+  if (!e || typeof e !== "object") return null;
+  const d = new Date(e.date);
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+  const titulo = e.content === null || e.content === undefined ? "" : String(e.content).trim();
+  return {
+    key: dayKey(d),
+    secs: parseSheetDuration(e.duration),
+    habilidad: e.type ? String(e.type) : "—",
+    recurso: e.source ? String(e.source) : "—",
+    titulo: titulo ? titulo : "Sin título",
+    url: e.url ? String(e.url) : "",
+    notas: e.note ? String(e.note) : "",
+    row: typeof e.id === "number" ? e.id : null,
+  };
 }
 
 /* ---------- hojas ---------- */
@@ -57,18 +138,35 @@ export function localSheets() {
   return Array.isArray(v) ? v.filter((n) => typeof n === "string") : [];
 }
 
-export function createSheet(name) {
-  const clean = String(name || "").trim();
-  if (!clean) return false;
+function saveLocalSheet(name) {
   const list = localSheets();
-  if (!list.includes(clean)) list.push(clean);
+  if (!list.includes(name)) list.push(name);
   return set(SHEETS_KEY, list);
 }
 
-export function deleteSheet(name) {
+/* Crea en el servidor; sin conexión cae a la lista local. */
+export async function createSheet(name) {
+  const clean = String(name || "").trim();
+  if (!clean) return false;
+  try {
+    await req(EP.SHEETS, { method: "POST", body: { name: clean } });
+    return true;
+  } catch {
+    return saveLocalSheet(clean);
+  }
+}
+
+export async function deleteSheet(name) {
   set(SHEETS_KEY, localSheets().filter((n) => n !== name));
   set(PENDING_KEY, pending().filter((p) => p.sheet !== name));
   if (get(LAST_KEY, "") === name) del(LAST_KEY);
+  try {
+    const sheets = await req(EP.SHEETS);
+    const found = (Array.isArray(sheets) ? sheets : []).find((s) => s?.name === name);
+    if (found) await req(`${EP.SHEETS}/${found.id}`, { method: "DELETE" });
+  } catch {
+    // ya se limpió lo local; el servidor queda para el próximo retry
+  }
   return true;
 }
 
@@ -87,9 +185,8 @@ export async function listSheets() {
     api = [...((await mockData()).sheets || [])];
   } else {
     try {
-      const data = await req(`${API_BASE}?action=GET_SHEETS`);
-      const names = Array.isArray(data) ? data : data?.sheets || [];
-      api = names.filter((n) => typeof n === "string");
+      const data = await req(EP.SHEETS);
+      api = (Array.isArray(data) ? data : []).map((s) => s?.name).filter((n) => typeof n === "string");
     } catch {
       api = [];
     }
@@ -105,17 +202,24 @@ function shortMonth(name) {
   return parts[parts.length - 1] || t;
 }
 
-/** Totales por mes para el pie. Dev: mock. Prod: GET_ROWS_FROM_ALL_SHEETS. */
+/** Totales por mes para el pie: 2 GET (sheets + rows) y se agrupa acá. */
 export async function getMonthlyTotals() {
   if (USE_MOCK) {
     const m = await monthlyMock();
     return Array.isArray(m) ? m.filter((d) => d && typeof d.total === "number") : [];
   }
-  const data = await req(`${API_BASE}?action=GET_ROWS_FROM_ALL_SHEETS`);
+  const [sheets, rows] = await Promise.all([req(EP.SHEETS), req(EP.ROWS)]);
+  const nameById = new Map((Array.isArray(sheets) ? sheets : []).map((s) => [s?.id, s?.name]));
+  const totals = new Map();
+  for (const e of Array.isArray(rows) ? rows : []) {
+    const r = normalizeEntry(e);
+    const name = nameById.get(e?.sheet_id);
+    if (!r || !name) continue;
+    totals.set(name, (totals.get(name) || 0) + r.secs);
+  }
   const out = [];
-  for (const [name, matrix] of Object.entries(data || {})) {
-    const total = parseRows(matrix).reduce((a, r) => a + (r.secs || 0), 0);
-    if (total > 0) out.push({ month: name, label: shortMonth(name), total });
+  for (const [month, total] of totals) {
+    if (total > 0) out.push({ month, label: shortMonth(month), total });
   }
   return out.sort((a, b) => a.label.localeCompare(b.label, "es"));
 }
@@ -131,50 +235,53 @@ function pendingFor(sheet) {
   return pending().filter((p) => p.sheet === sheet);
 }
 
-/** La cola guarda payloads del POST; se normalizan a fila para la grilla. */
+/** La cola ya guarda payloads REST; se normalizan a fila para la grilla. */
 function pendingToRow(p) {
-  try {
-    return {
-      key: dayKey(new Date(p.fecha)),
-      secs: parseDuration(p.hora).secs || 0,
-      habilidad: p.habilidad || "—",
-      recurso: p.recurso || "—",
-      titulo: p.contenido || "Sin título",
-      url: p.link || "",
-      notas: p.nota || "",
-    };
-  } catch {
-    return null;
-  }
+  const r = normalizeEntry(p);
+  if (!r) return null;
+  return { ...r, row: null };
 }
 
 export async function getRows(sheet) {
   try {
-    const matrix = USE_MOCK
-      ? (await mockData()).rows?.[sheet] || []
-      : await fetchMatrix(sheet);
+    if (USE_MOCK) {
+      const matrix = (await mockData()).rows?.[sheet] || [];
+      const queued = pendingFor(sheet).map(pendingToRow).filter(Boolean);
+      return { rows: parseRows(matrix).concat(queued), live: true, error: "" };
+    }
+    const data = await req(`${EP.ROWS}?${QP.SHEET}=${encodeURIComponent(sheet)}`);
     const queued = pendingFor(sheet).map(pendingToRow).filter(Boolean);
-    return { rows: parseRows(matrix).concat(queued), live: true, error: "" };
+    return { rows: (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean).concat(queued), live: true, error: "" };
   } catch (e) {
     return { rows: pendingFor(sheet).map(pendingToRow).filter(Boolean), live: false, error: e?.message || "error de red" };
   }
 }
 
-async function fetchMatrix(sheet) {
-  const data = await req(`${API_BASE}?action=GET_ROW_BY_SHEET&sheet=${encodeURIComponent(sheet)}`);
-  return Array.isArray(data) ? data : data?.rows || data?.data || [];
-}
-
 /* ---------- escribir: POST, si falla se encola ---------- */
 
+/* Registro manda forma GAS {fecha, habilidad, ...}; acá se traduce a REST. */
+function toPayload(entry) {
+  return {
+    [F.SHEET]: entry.sheet,
+    [F.DATE]: entry.fecha,
+    [F.TYPE]: entry.habilidad,
+    [F.SOURCE]: entry.recurso,
+    [F.CONTENT]: entry.contenido,
+    [F.DURATION]: entry.hora,
+    [F.NOTE]: entry.nota || "",
+    [F.URL]: entry.link || "",
+  };
+}
+
 export async function postEntry(entry) {
+  const payload = toPayload(entry);
   try {
-    await post("POST_CREATE", entry);
+    await req(EP.ENTRIES, { method: "POST", body: payload });
     await retryPending();
-    return "sent";
+    return SEND.SENT;
   } catch {
-    set(PENDING_KEY, [...pending(), entry]);
-    return "queued";
+    set(PENDING_KEY, [...pending(), payload]);
+    return SEND.QUEUED;
   }
 }
 
@@ -183,7 +290,7 @@ export async function retryPending() {
   const rest = [];
   for (const p of pending()) {
     try {
-      await post("POST_CREATE", p);
+      await req(EP.ENTRIES, { method: "POST", body: p });
     } catch {
       rest.push(p);
     }
@@ -192,16 +299,26 @@ export async function retryPending() {
   return rest.length;
 }
 
-/** Actualiza celdas: changes = [{ col (1-based), newValue }]. Lanza si falla. */
+/** Actualiza por id: changes = [{ col (1-based), newValue }]. Un solo PATCH. */
 export async function updateCells(sheet, row, changes) {
-  for (const c of changes) {
-    await post("POST_UPDATE", { sheet, row, col: c.col, newValue: c.newValue });
+  const patch = {};
+  for (const c of changes || []) {
+    const field = FIELD_BY_COL[c.col];
+    if (!field) continue;
+    if (c.col === COLS.contenido && c.newValue && typeof c.newValue === "object") {
+      patch[F.CONTENT] = c.newValue.title || "";
+      patch[F.URL] = c.newValue.url || "";
+    } else {
+      patch[field] = c.newValue;
+    }
   }
+  if (Object.keys(patch).length === 0) return;
+  await req(`${EP.ENTRIES}/${row}`, { method: "PATCH", body: patch });
 }
 
-/** Borra una fila por índice 1-based. Lanza si falla. */
+/** Borra una entrada por id. Lanza si falla. */
 export async function deleteRowApi(sheet, row) {
-  await post("POST_DELETE", { sheet, row });
+  await req(`${EP.ENTRIES}/${row}`, { method: "DELETE" });
 }
 
 export function pendingCount(sheet) {

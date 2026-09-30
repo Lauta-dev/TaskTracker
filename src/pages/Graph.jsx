@@ -84,8 +84,10 @@ export function Graph({ names, onEdit }) {
     }
   }, [path, names, sheet, search ]);
 
-  // Totales por mes para el pie: mock en dev, API en prod.
+  // Totales por mes para el pie.
+  // Lazy: solo se pide al abrir la vista pastel.
   useEffect(() => {
+    if (vista !== "pastel" || monthly !== null) return;
     let alive = true;
     getMonthlyTotals().then((m) => {
       if (alive) setMonthly(m);
@@ -95,7 +97,7 @@ export function Graph({ names, onEdit }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [vista]);
 
   // Mes a mostrar: el más reciente entre las filas (la hoja define su mes);
   // si no hay filas, el actual del dispositivo.
