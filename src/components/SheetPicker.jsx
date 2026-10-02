@@ -30,7 +30,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
     return <p class="text-sm text-muted-foreground">Sin hojas.</p>;
   }
   return (
-    <div class="ml-auto w-[60%] shrink-0">
+    <div class="w-full">
     <Select value={sheet} onValueChange={onPick}>
       <SelectTrigger className="font-display h-auto w-full gap-2 rounded-md border-0 bg-muted px-4 py-2 text-[17px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
         <SelectValue>{sheet || "Elegí hoja"}</SelectValue>

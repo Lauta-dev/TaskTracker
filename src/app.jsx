@@ -58,9 +58,8 @@ export function App() {
   return (
     <div class="min-h-screen bg-background text-foreground">
       <div class="mx-auto w-full max-w-[680px] px-4 pb-10 pt-8">
-        <header class="mb-5 space-y-2">
-          <div class="flex items-center justify-between gap-2">
-          <div class="flex shrink-0 items-center gap-2.5">
+        <header class="mb-5 flex items-center gap-2">
+          <div class="flex shrink-0 items-center gap-2">
             <img src="/icons.svg" alt="Tinta" class="size-7 rounded-md" />
             <p class="font-display text-[17px] font-semibold tracking-tight">Tinta</p>
             {USE_MOCK && (
@@ -69,10 +68,11 @@ export function App() {
               </span>
             )}
           </div>
-          <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
+          <div class="min-w-0 flex-1">
+            <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
           </div>
           <Select value={vista} onValueChange={setVista}>
-            <SelectTrigger aria-label="Vista" className="font-display h-auto w-full gap-2 rounded-md border-0 bg-muted px-4 py-2 text-[15px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
+            <SelectTrigger aria-label="Vista" className="font-display h-auto w-auto shrink-0 gap-2 rounded-md border-0 bg-muted px-3 py-2 text-[15px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
               <SelectValue>
                 <span class="flex items-center gap-2">
                   <current.Icon class="size-4 text-muted-foreground" />
