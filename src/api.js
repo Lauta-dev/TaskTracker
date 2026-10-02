@@ -43,7 +43,8 @@ async function monthlyMock() {
   return monthlyCache;
 }
 
-// Solo nombres creados acá; las filas viven en la API.
+// Nombres creados sin conexión, pendientes de subir al servidor.
+// Cuando el sync los confirma en la DB, salen de esta lista.
 const SHEETS_KEY = "tt-sheets";
 // Entradas cuyo POST falló; se reintentan después.
 // v2: payloads REST (la v1 con forma GAS quedó obsoleta en la migración).
@@ -179,6 +180,30 @@ export function saveLastSheet(name) {
   set(LAST_KEY, name || "");
 }
 
+/** Sube al servidor las hojas creadas sin conexión.
+ * Devuelve las confirmadas (creadas o 409: ya existían). Las que siguen
+ * fallando quedan en la lista local para el próximo intento. */
+async function syncLocalSheets(apiNames) {
+  const onServer = new Set(apiNames);
+  const keep = [];
+  const pushed = [];
+  for (const name of localSheets()) {
+    if (onServer.has(name)) continue;
+    try {
+      await req(EP.SHEETS, { method: "POST", body: { name } });
+      pushed.push(name);
+    } catch (e) {
+      if (e?.status === 409) {
+        pushed.push(name);
+        continue;
+      }
+      keep.push(name);
+    }
+  }
+  set(SHEETS_KEY, keep);
+  return pushed;
+}
+
 /** Una sola lista: API + locales, sin duplicados. */
 export async function listSheets() {
   let api = [];
@@ -188,6 +213,8 @@ export async function listSheets() {
     try {
       const data = await req(EP.SHEETS);
       api = (Array.isArray(data) ? data : []).map((s) => s?.name).filter((n) => typeof n === "string");
+      // Lo creado en la página termina en la DB: si algo quedó solo local, se sube ahora.
+      api = [...api, ...(await syncLocalSheets(api))];
     } catch {
       api = [];
     }
