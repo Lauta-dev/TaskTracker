@@ -58,7 +58,7 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
     // Edición: UPDATE solo las columnas que cambiaron.
     if (editing?.row) {
       const changes = [];
-      if (dia !== editing.key) changes.push({ col: COLS.fecha, newValue: `${dia}T12:00:00.000Z` });
+      if (dia !== editing.key) changes.push({ col: COLS.fecha, newValue: dia });
       if (habilidad !== editing.habilidad) changes.push({ col: COLS.habilidad, newValue: habilidad });
       if (recurso !== editing.recurso) changes.push({ col: COLS.recurso, newValue: recurso });
       if (contenido.trim() !== editing.titulo || finalUrl !== editing.url) {
@@ -77,7 +77,7 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
       return;
     }
     postEntry({
-      fecha: `${dia}T12:00:00.000Z`,
+      fecha: dia,
       habilidad,
       recurso,
       contenido: contenido.trim(),

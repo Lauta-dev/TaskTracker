@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
 import { deleteRowApi, getMonthlyTotals, localSheets, pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
-import { currentMonth, dayKey, monthCells } from "../dates.js";
+import { currentMonth, dayKey, monthCells, monthFromSheetName } from "../dates.js";
 import { fmtTotal, level } from "../format.js";
 import { resolveSheet } from "../sheet.js";
 import { Sheet } from "../components/ui/sheet";
@@ -19,7 +19,7 @@ import { Stats } from "../components/Stats";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Bars } from "../components/Bars";
 import { Pie } from "../components/Pie";
-import { ChartColumn, ChartPie, Check, LayoutGrid, Pencil, Table, Trash2 } from "lucide-preact";
+import { Check, Pencil, Trash2 } from "lucide-preact";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
 const LEVEL_BG = [
@@ -30,12 +30,11 @@ const LEVEL_BG = [
   "bg-chart-2",
 ];
 
-export function Graph({ names, onEdit }) {
+export function Graph({ names, onEdit, vista = "grilla" }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
   const [sheetKey, setSheetKey] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [vista, setVista] = useState("grilla");
   const [monthly, setMonthly] = useState(null);
   const [rowError, setRowError] = useState("");
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -99,8 +98,8 @@ export function Graph({ names, onEdit }) {
     };
   }, [vista]);
 
-  // Mes a mostrar: el más reciente entre las filas (la hoja define su mes);
-  // si no hay filas, el actual del dispositivo.
+  // Mes a mostrar: lo define la hoja ("Inglés - 2026 Octubre"); las filas
+  // solo son fallback para hojas con nombre libre, y el dispositivo si no hay.
   const now = currentMonth();
   // Skeleton con la forma del mes actual del dispositivo.
   const skelCells = monthCells(now.y, now.m);
@@ -115,7 +114,11 @@ export function Graph({ names, onEdit }) {
     i === 6 && "rounded-tr-md",
   ].filter(Boolean).join(" ");
   let y = now.y, m = now.m;
-  if (apiRows && apiRows.length > 0) {
+  const fromName = monthFromSheetName(sheet);
+  if (fromName) {
+    y = fromName.y;
+    m = fromName.m;
+  } else if (apiRows && apiRows.length > 0) {
     const months = [...new Set(apiRows.map((r) => r.key?.slice(0, 7)).filter(Boolean))].sort();
     const latest = months[months.length - 1];
     if (latest) {
@@ -156,7 +159,11 @@ export function Graph({ names, onEdit }) {
   const seriesLoading = cmp.some((name) => rowsFor(name) === null);
   const series = cmp.map((name, idx) => {
     const all = rowsFor(name) || [];
-    const p = latestPrefix(all);
+    // Cada serie muestra el mes de su hoja; fallback al último mes con filas.
+    const named = monthFromSheetName(name);
+    const p = named
+      ? `${String(named.y).padStart(4, "0")}-${String(named.m).padStart(2, "0")}`
+      : latestPrefix(all);
     const dm = new Map();
     for (const r of all) {
       if (p && r.key?.slice(0, 7) !== p) continue;
@@ -236,49 +243,6 @@ export function Graph({ names, onEdit }) {
             Sin conexión · mostrando lo guardado{queued > 0 ? ` · ${queued} en cola` : ""} · reintentar{error ? ` (${error})` : ""}
           </button>
         )}
-      </div>
-
-      <div class="mb-3 flex w-fit gap-1 rounded-full bg-muted p-1">
-        <button
-          type="button"
-          onClick={() => setVista("grilla")}
-          aria-pressed={vista === "grilla"}
-          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "grilla" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
-          }`}
-        >
-          <LayoutGrid class="size-4" /> Grilla
-        </button>
-        <button
-          type="button"
-          onClick={() => setVista("barras")}
-          aria-pressed={vista === "barras"}
-          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "barras" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
-          }`}
-        >
-          <ChartColumn class="size-4" /> Barras
-        </button>
-        <button
-          type="button"
-          onClick={() => setVista("pastel")}
-          aria-pressed={vista === "pastel"}
-          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "pastel" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
-          }`}
-        >
-          <ChartPie class="size-4" /> Pastel
-        </button>
-        <button
-          type="button"
-          onClick={() => setVista("tabla")}
-          aria-pressed={vista === "tabla"}
-          class={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            vista === "tabla" ? "bg-chart-2 text-background shadow-sm" : "text-muted-foreground"
-          }`}
-        >
-          <Table class="size-4" /> Tabla
-        </button>
       </div>
 
       {vista === "barras" && list.length > 1 && (

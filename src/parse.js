@@ -1,4 +1,6 @@
 // Parsea matriz con header a filas normalizadas.
+import { dateKey } from "./dates.js";
+
 export function parseRows(m) {
   if (!Array.isArray(m) || m.length < 2) return [];
   const out = [];
@@ -7,15 +9,9 @@ export function parseRows(m) {
     if (!Array.isArray(row)) continue;
     const rawFecha = row[0];
     if (rawFecha === "Hora") continue;
-    const d = new Date(rawFecha);
-    if (!(d instanceof Date) || Number.isNaN(d.getTime())) continue;
-    // Clave local del dispositivo (no UTC).
-    const key =
-      String(d.getFullYear()).padStart(4, "0") +
-      "-" +
-      String(d.getMonth() + 1).padStart(2, "0") +
-      "-" +
-      String(d.getDate()).padStart(2, "0");
+    // Día calendario: el date-only va literal (UTC-midnight lo corría un día).
+    const key = dateKey(rawFecha);
+    if (!key) continue;
     const habilidad = row[1] ? String(row[1]) : "—";
     const recurso = row[2] ? String(row[2]) : "—";
     let titulo = "Sin título";

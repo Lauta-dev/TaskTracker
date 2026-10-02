@@ -1,4 +1,4 @@
-import { dayKey } from "./dates.js";
+import { dateKey } from "./dates.js";
 import { parseDuration, parseRows, parseSheetDuration } from "./parse.js";
 import { del, get, set } from "./storage.js";
 
@@ -113,14 +113,15 @@ const FIELD_BY_COL = Object.freeze({
 });
 
 /* Fila del backend -> fila normalizada de la grilla.
-   row = id D1: es lo que Editar/Borrar mandan de vuelta. */
+   row = id D1: es lo que Editar/Borrar mandan de vuelta.
+   La fecha es día calendario (dateKey): nunca se reconvierte por timezone. */
 function normalizeEntry(e) {
   if (!e || typeof e !== "object") return null;
-  const d = new Date(e.date);
-  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+  const key = dateKey(e.date);
+  if (!key) return null;
   const titulo = e.content === null || e.content === undefined ? "" : String(e.content).trim();
   return {
-    key: dayKey(d),
+    key,
     secs: parseSheetDuration(e.duration),
     habilidad: e.type ? String(e.type) : "—",
     recurso: e.source ? String(e.source) : "—",
@@ -259,11 +260,13 @@ export async function getRows(sheet) {
 
 /* ---------- escribir: POST, si falla se encola ---------- */
 
-/* Registro manda forma GAS {fecha, habilidad, ...}; acá se traduce a REST. */
+/* Registro manda {fecha}; se guarda día calendario YYYY-MM-DD, sin hora
+   (la hora UTC movía el día según el timezone). El slice conserva los
+   payloads en cola con formato ISO legacy. */
 function toPayload(entry) {
   return {
     [F.SHEET]: entry.sheet,
-    [F.DATE]: entry.fecha,
+    [F.DATE]: String(entry.fecha ?? "").slice(0, 10),
     [F.TYPE]: entry.habilidad,
     [F.SOURCE]: entry.recurso,
     [F.CONTENT]: entry.contenido,
