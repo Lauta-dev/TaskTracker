@@ -4,8 +4,11 @@ import { createSheet, deleteSheet, getSheetById, getSheetByName, listSheets, ren
 import { listEntries } from "../db/entries.js";
 import { fail, HttpError, ok, STATUS } from "../http.js";
 import { parseId, validateSheetCreate, validateSheetUpdate } from "../validators.js";
+import { requireAuth } from "../auth.js";
 
 const sheets = new Hono();
+
+sheets.use("*", requireAuth);
 
 sheets.get("/", async (c) => {
   try {

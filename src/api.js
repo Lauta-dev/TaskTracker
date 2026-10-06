@@ -10,6 +10,10 @@ const EP = Object.freeze({
   SHEETS: "/sheets",
   ENTRIES: "/entries",
   ROWS: "/rows",
+  STATUS: "/auth/status",
+  SETUP: "/auth/setup",
+  LOGIN: "/auth/login",
+  LOGOUT: "/auth/logout",
 });
 
 /* Campos del POST/PATCH (los que acepta el backend). */
@@ -48,6 +52,30 @@ const PENDING_KEY = "tt-pending-v2";
 // Última hoja usada.
 const LAST_KEY = "tt-sheet";
 
+/* Sesión en cookie HttpOnly: el front nunca ve el token.
+   El 401 invalida la vista (tt:auth avisa a la UI para mostrar el lock). */
+export async function authStatus() {
+  return req(EP.STATUS, undefined, { retries: 0 });
+}
+
+export async function setup(username, password) {
+  await req(EP.SETUP, { method: "POST", body: { username, password } }, { retries: 0 });
+  window.dispatchEvent(new Event("tt:auth"));
+}
+
+export async function login(username, password) {
+  await req(EP.LOGIN, { method: "POST", body: { username, password } }, { retries: 0 });
+  window.dispatchEvent(new Event("tt:auth"));
+}
+
+export async function logout() {
+  try {
+    await req(EP.LOGOUT, { method: "POST" }, { retries: 0 });
+  } finally {
+    window.dispatchEvent(new Event("tt:auth"));
+  }
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -62,9 +90,13 @@ async function req(path, { method = "GET", body } = {}, { timeout = 15000, retri
       const res = await fetch(`${API_BASE}${path}`, {
         method,
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(timeout),
       });
+      if (res.status === 401) {
+        window.dispatchEvent(new Event("tt:auth"));
+      }
       if (!res.ok) {
         let msg = "HTTP " + res.status;
         try {

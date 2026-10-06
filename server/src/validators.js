@@ -1,4 +1,15 @@
-import { BODY, ENTRY, ENTRY_REQUIRED, ENTRY_UPDATABLE, MAX_SHEET_NAME, MSG } from "./constants.js";
+import {
+  BODY,
+  ENTRY,
+  ENTRY_REQUIRED,
+  ENTRY_UPDATABLE,
+  MAX_PASSWORD_LEN,
+  MAX_SHEET_NAME,
+  MAX_USERNAME_LEN,
+  MIN_PASSWORD_LEN,
+  MIN_USERNAME_LEN,
+  MSG,
+} from "./constants.js";
 import { HttpError, STATUS } from "./http.js";
 
 /* :id de ruta → entero positivo o 400. */
@@ -32,6 +43,40 @@ export function validateSheetCreate(body) {
 /* PATCH /sheets/:id: mismo contrato que crear. */
 export function validateSheetUpdate(body) {
   return validateSheetCreate(body);
+}
+
+/* POST /auth/setup y /auth/login: username + password con política mínima. */
+const USERNAME_RE = /^[A-Za-z0-9_-]+$/;
+
+function validateUsername(raw) {
+  const username = asString(raw, "username").trim();
+  if (
+    username.length < MIN_USERNAME_LEN ||
+    username.length > MAX_USERNAME_LEN ||
+    !USERNAME_RE.test(username)
+  ) {
+    throw new HttpError(STATUS.BAD_REQUEST, MSG.INVALID_USERNAME);
+  }
+  return username;
+}
+
+function validatePassword(raw) {
+  const password = asString(raw, "password");
+  if (password.length < MIN_PASSWORD_LEN) {
+    throw new HttpError(STATUS.BAD_REQUEST, MSG.PASSWORD_TOO_SHORT);
+  }
+  if (password.length > MAX_PASSWORD_LEN) {
+    throw new HttpError(STATUS.BAD_REQUEST, MSG.PASSWORD_TOO_LONG);
+  }
+  return password;
+}
+
+export function validateSetup(body) {
+  return { username: validateUsername(body?.username), password: validatePassword(body?.password) };
+}
+
+export function validateLogin(body) {
+  return { username: validateUsername(body?.username), password: validatePassword(body?.password) };
 }
 
 /* POST /entries: devuelve { entry, sheetId?, sheetName? } ya normalizado. */

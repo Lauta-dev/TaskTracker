@@ -36,6 +36,17 @@ VITE_GAS_ID=<id del deployment>
 # prod: exportar GAS_ID=<id> antes del build (o en la plataforma)
 ```
 
+## Auth
+
+Sesión en cookie `HttpOnly` (`tt_session`): el JS nunca ve el token.
+
+- Passwords con **bcrypt** (lib `bcryptjs`), sesiones opacas revocables en D1
+  (`users` + `sessions`), anti-CSRF por `Origin` + `SameSite=Lax`.
+- La cuenta se crea una sola vez: `POST /auth/setup` solo anda con la tabla
+  `users` vacía (después responde 403, no hay registro público).
+- Aplicar esquema: `wrangler d1 execute DB --file=./schema.sql [--remote]`.
+- Orígenes extra del front (CORS/CSRF): `ALLOWED_ORIGINS` en `wrangler.toml`.
+
 ## Estructura
 
 ```

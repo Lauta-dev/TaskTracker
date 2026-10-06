@@ -1,8 +1,9 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { ChartColumn, ChartPie, LayoutGrid, Plus, Table } from "lucide-preact";
+import { ChartColumn, ChartPie, LayoutGrid, LogOut, Plus, Table } from "lucide-preact";
 import { useSheets } from "./hooks/useSheets";
-import { saveLastSheet, USE_MOCK } from "./api.js";
+import { authStatus, logout, saveLastSheet, USE_MOCK } from "./api.js";
+import { LockScreen } from "./components/LockScreen";
 import { Graph } from "./pages/Graph";
 import { Registro } from "./pages/Registro";
 import { Modal } from "./components/ui/modal";
@@ -25,6 +26,10 @@ export function App() {
   const [regOpen, setRegOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [vista, setVista] = useState("grilla");
+  // Auth: checking → setup (sin cuenta) / login (sin sesión) / app.
+  const [auth, setAuth] = useState({ state: USE_MOCK ? "app" : "checking" });
+  const authRef = useRef(auth.state);
+  authRef.current = auth.state;
   const current = VISTAS.find((v) => v.value === vista) || VISTAS[0];
 
   // La lista se pide una sola vez acá y baja por props.
@@ -37,6 +42,31 @@ export function App() {
   useEffect(() => {
     if (sheet) saveLastSheet(sheet);
   }, [sheet]);
+
+  // El 401 (sesión vencida/inválida) re-chequea solo si estábamos en la app:
+  // si ya muestra el lock, no hace nada (evita loop de reintentos).
+  useEffect(() => {
+    if (USE_MOCK) return;
+    let alive = true;
+    async function check() {
+      try {
+        const s = await authStatus();
+        if (!alive) return;
+        setAuth(s.setupRequired ? { state: "setup" } : s.username ? { state: "app" } : { state: "login" });
+      } catch {
+        if (alive && authRef.current === "checking") setAuth({ state: "login" });
+      }
+    }
+    function onAuth() {
+      if (authRef.current === "app") check();
+    }
+    check();
+    window.addEventListener("tt:auth", onAuth);
+    return () => {
+      alive = false;
+      window.removeEventListener("tt:auth", onAuth);
+    };
+  }, []);
 
   function pick(name) {
     saveLastSheet(name);
@@ -56,6 +86,16 @@ export function App() {
   function closeReg() {
     setRegOpen(false);
     setEditing(null);
+  }
+
+  async function onLogout() {
+    await logout();
+    setAuth({ state: "login" });
+  }
+
+  if (auth.state !== "app") {
+    if (auth.state === "checking") return null;
+    return <LockScreen mode={auth.state} onDone={() => setAuth({ state: "app" })} />;
   }
 
   return (
@@ -99,6 +139,17 @@ export function App() {
             >
               <Plus class="size-5" />
             </button>
+            {!USE_MOCK && (
+              <button
+                type="button"
+                onClick={onLogout}
+                title="Salir"
+                aria-label="Salir"
+                class="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
+              >
+                <LogOut class="size-5" />
+              </button>
+            )}
           </div>
         </header>
         <div class="mb-5">

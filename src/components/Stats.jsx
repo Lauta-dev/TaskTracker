@@ -37,13 +37,12 @@ export function Stats({ dayInfo, monthTotal, y, m }) {
   const goalPct = goal > 0 ? Math.min(100, Math.round((monthTotal / goal) * 100)) : 0;
 
   const items = [
-    { label: "Total", value: fmtTotal(monthTotal) },
     { label: "Racha", value: racha > 0 ? `${racha}d` : "—" },
     { label: "Mejor día", value: best ? `${best.key.slice(8, 10)} · ${fmtTotal(best.total)}` : "—" },
   ];
 
   return (
-    <div class="col-span-7 grid grid-cols-4 divide-x divide-border overflow-hidden rounded-b-md border-x border-b border-border bg-card">
+    <div class="col-span-7 grid grid-cols-3 divide-x divide-border overflow-hidden rounded-b-md border-x border-b border-border bg-card">
       {items.slice(0, 2).map((it) => (
         <div key={it.label} class="px-2 py-2">
           <p class="font-data text-[9px] uppercase tracking-widest text-muted-foreground">{it.label}</p>

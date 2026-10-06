@@ -4,12 +4,15 @@ import { listEntries } from "../db/entries.js";
 import { getSheetByName } from "../db/sheets.js";
 import { fail, HttpError, ok, STATUS } from "../http.js";
 import { parseId } from "../validators.js";
+import { requireAuth } from "../auth.js";
 
 /* Alias de lectura para la migración del frontend:
    GET /rows                → todo
    GET /rows?sheetId=1      → por id
    GET /rows?sheet=Nombre   → por nombre (como el GAS de hoy) */
 const rows = new Hono();
+
+rows.use("*", requireAuth);
 
 rows.get("/", async (c) => {
   try {

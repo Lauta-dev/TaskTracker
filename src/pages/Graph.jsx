@@ -3,7 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { deleteRowApi, getMonthlyTotals, localSheets, pendingCount, saveLastSheet } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { currentMonth, dayKey, monthCells, monthFromSheetName } from "../dates.js";
-import { fmtTotal, level } from "../format.js";
+import { fmtShort, fmtTotal, level } from "../format.js";
 import { resolveSheet } from "../sheet.js";
 import { Sheet } from "../components/ui/sheet";
 import { DropdownMenu, DropdownMenuItem } from "../components/ui/dropdown-menu";
@@ -137,7 +137,6 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     }
   }
   const prefix = `${y}-${String(m).padStart(2, "0")}`;
-  const monthName = new Date(y, m - 1, 1).toLocaleDateString("es", { month: "long", year: "numeric" });
 
   // Comparar hojas (cada hoja ≈ un mes): hasta 2, con checkboxes.
   // Sin elección: la hoja en pantalla.
@@ -235,7 +234,6 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
         {list.length === 0 && !sheet && apiRows !== null && (
           <p class="text-sm text-muted-foreground">No hay hojas. Creá una desde el selector.</p>
         )}
-        <p class="font-data mt-2 text-[11px] uppercase tracking-widest text-muted-foreground">{monthName}</p>
         {apiRows !== null && !live && (
           <button
             type="button"
@@ -321,7 +319,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
               >
                 <span class="absolute inset-0 flex items-center justify-center p-1.5">
                   <span class={`font-data text-[14px] font-bold leading-none ${monthTcls}`}>
-                    {fmtTotal(monthTotal)}
+                    {fmtShort(monthTotal)}
                   </span>
                 </span>
               </div>
@@ -354,8 +352,8 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
                   </span>
                 )}
                 {d.total > 0 && (
-                    <span class={`font-data text-[12px] font-bold leading-none ${tcls}`}>
-                    {fmtTotal(d.total)}
+                    <span class={`flex justify-end font-data text-[12px] font-bold leading-none ${tcls}`}>
+                    {fmtShort(d.total)}
                   </span>
                 )}
               </span>

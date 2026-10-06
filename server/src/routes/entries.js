@@ -10,8 +10,11 @@ import {
 import { getSheetById, getSheetByName } from "../db/sheets.js";
 import { fail, HttpError, ok, STATUS } from "../http.js";
 import { parseId, validateEntryCreate, validateEntryPatch } from "../validators.js";
+import { requireAuth } from "../auth.js";
 
 const entries = new Hono();
+
+entries.use("*", requireAuth);
 
 /* Resuelve a qué hoja apunta el POST: sheetId directo o nombre. */
 async function resolveSheetId(db, sheetId, sheetName) {

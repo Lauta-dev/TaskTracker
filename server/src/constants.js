@@ -48,6 +48,12 @@ export const BODY = Object.freeze({ SHEET_ID: "sheetId", SHEET: "sheet" });
 
 export const MAX_SHEET_NAME = 120;
 
+/* Auth: límites del setup/login. */
+export const MIN_USERNAME_LEN = 3;
+export const MAX_USERNAME_LEN = 32;
+export const MIN_PASSWORD_LEN = 8;
+export const MAX_PASSWORD_LEN = 128;
+
 export const MSG = Object.freeze({
   NOT_FOUND: "Not found",
   INVALID_ID: "Invalid id: must be a positive integer",
@@ -61,5 +67,13 @@ export const MSG = Object.freeze({
   FIELD_MUST_BE_STRING: (field) => `Field '${field}' must be a string`,
   EMPTY_PATCH: "Nothing to update: provide at least one field",
   UNKNOWN_FIELD: (field) => `Unknown field '${field}'`,
+  UNAUTHORIZED: "Unauthorized",
+  FORBIDDEN: "Forbidden",
+  INVALID_CREDENTIALS: "Invalid username or password",
+  SETUP_DISABLED: "Setup is disabled: a user already exists",
+  INVALID_USERNAME: `Username must be ${MIN_USERNAME_LEN}-${MAX_USERNAME_LEN} chars (letters, numbers, _ or -)`,
+  PASSWORD_TOO_SHORT: `Password must be at least ${MIN_PASSWORD_LEN} chars`,
+  PASSWORD_TOO_LONG: `Password must be at most ${MAX_PASSWORD_LEN} chars`,
+  AUTH_NOT_CONFIGURED: "Auth not configured",
   INTERNAL: "Internal error",
 });

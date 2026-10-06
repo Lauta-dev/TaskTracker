@@ -20,9 +20,26 @@ export const API_DOCS = {
   name: "tasktracker-api",
   version: "1.0.0",
   errors: "Todos los errores responden { error: string } con su status HTTP.",
+  auth: "Sesión en cookie HttpOnly (tt_session): el front usa fetch con credentials: include. GET /auth/status dice si falta crear la cuenta o si hay sesión. /sheets, /entries y /rows exigen sesión (401) y chequean Origin (403).",
   endpoints: [
     { method: "GET", path: "/health", description: "Pulso del Worker.", response: { ok: true } },
     { method: "GET", path: "/docs", description: "Esta documentación." },
+    {
+      method: "GET", path: "/auth/status", description: "Estado público: si falta setup o hay sesión.",
+      response: { setupRequired: false, username: "tu-user" },
+    },
+    {
+      method: "POST", path: "/auth/setup", description: "Crea LA cuenta (password con Argon2id). Solo con tabla vacía: después 403.",
+      body: { username: "tu-user", password: "tu-clave" }, response: { username: "tu-user" }, status: 201,
+    },
+    {
+      method: "POST", path: "/auth/login", description: "Login (mismo 401 exista o no el user). Setea la cookie de sesión.",
+      body: { username: "tu-user", password: "tu-clave" }, response: { username: "tu-user" },
+    },
+    {
+      method: "POST", path: "/auth/logout", description: "Revoca la sesión y limpia la cookie.",
+      response: { ok: true },
+    },
     {
       method: "GET", path: "/sheets", description: "Lista las hojas en orden cronológico (sin fecha al final, alfabéticas).",
       response: [{ id: 1, name: "Inglés - 2026 Septiembre" }],

@@ -8,6 +8,13 @@ export function fmtTotal(secs) {
   return m + "m";
 }
 
+// Segundos -> "Xh" | "Ym" (compacto para la grilla, sin redondear).
+export function fmtShort(secs) {
+  const totalMin = Math.floor(Number(secs) / 60);
+  if (totalMin >= 60) return Math.floor(totalMin / 60) + "h";
+  return totalMin + "m";
+}
+
 // Segundos -> "HH:MM:SS".
 export function secsToHMS(secs) {
   const s = Math.max(0, Math.round(Number(secs)));
