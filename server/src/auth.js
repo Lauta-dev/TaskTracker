@@ -13,6 +13,20 @@ function isHttps(c) {
   return new URL(c.req.url).protocol === "https:";
 }
 
+/* Si el front vive en otro sitio (cross-site), Lax no viaja en fetch:
+   se usa None + Secure (solo https). Mismo sitio: Lax. */
+function sessionCookieOpts(c) {
+  const origin = c.req.header("Origin");
+  const crossSite = !!origin && origin !== new URL(c.req.url).origin;
+  return {
+    path: "/",
+    httpOnly: true,
+    sameSite: crossSite ? "None" : "Lax",
+    secure: crossSite ? true : isHttps(c),
+    maxAge: TTL_SECS,
+  };
+}
+
 /* Orígenes con permiso: el propio (front y API mismo dominio) + extras de env. */
 export function getAllowedOrigins(c) {
   const extra = String(c.env.ALLOWED_ORIGINS || "")
@@ -34,19 +48,14 @@ export async function startSession(c, userId) {
   const token = randomToken();
   const expiresAt = new Date(Date.now() + TTL_SECS * 1000).toISOString();
   await createSession(c.env.DB, userId, token, expiresAt);
-  setCookie(c, COOKIE, token, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "Lax",
-    secure: isHttps(c),
-    maxAge: TTL_SECS,
-  });
+  setCookie(c, COOKIE, token, sessionCookieOpts(c));
 }
 
 export async function endSession(c) {
   const token = getCookie(c, COOKIE);
   if (token) await deleteSession(c.env.DB, token);
-  deleteCookie(c, COOKIE, { path: "/", secure: isHttps(c) });
+  const { maxAge: _maxAge, ...clearOpts } = sessionCookieOpts(c);
+  deleteCookie(c, COOKIE, clearOpts);
 }
 
 /* Middleware: exige sesión válida en cookie (401 si no). Deja el user en contexto. */
