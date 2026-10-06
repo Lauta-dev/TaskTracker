@@ -53,4 +53,7 @@ src/
 
 ## Mock
 
-`src/mock/data.json` con datos congelados. En `dev` se usa el mock (solo lectura; el POST va a la API real), en `build` la API. El pill "mock" del header indica el modo.
+`src/mock/data.json` con datos congelados (hojas + matrices). En dev el front usa el mock
+automáticamente para testear los gráficos: grilla y barras leen las matrices, y el pastel
+agrupa `sheets + rows` del propio mock como hace `getMonthlyTotals` con `GET /sheets` +
+`GET /rows`. El build de prod va contra la API real. El pill "mock" del header indica el modo.

@@ -24,7 +24,7 @@ export const API_DOCS = {
     { method: "GET", path: "/health", description: "Pulso del Worker.", response: { ok: true } },
     { method: "GET", path: "/docs", description: "Esta documentación." },
     {
-      method: "GET", path: "/sheets", description: "Lista las hojas.",
+      method: "GET", path: "/sheets", description: "Lista las hojas en orden cronológico (sin fecha al final, alfabéticas).",
       response: [{ id: 1, name: "Inglés - 2026 Septiembre" }],
     },
     {
@@ -38,6 +38,11 @@ export const API_DOCS = {
     {
       method: "DELETE", path: `/sheets/${ID}`, description: "Borra la hoja y sus entries.",
       params: { [PARAM.ID]: "entero positivo" }, response: { deleted: 1 },
+    },
+    {
+      method: "PATCH", path: `/sheets/${ID}`, description: "Renombra la hoja (404 si no existe, 409 si el nombre existe).",
+      params: { [PARAM.ID]: "entero positivo" },
+      body: { name: "Inglés - 2026 Noviembre" }, response: { id: 1, name: "Inglés - 2026 Noviembre" },
     },
     {
       method: "GET", path: "/entries", description: "Todas las entries.",

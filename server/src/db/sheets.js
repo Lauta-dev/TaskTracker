@@ -8,7 +8,33 @@ export async function listSheets(db) {
   const { results } = await db
     .prepare(`SELECT ${ID}, ${NAME} FROM "${T}" ORDER BY ${NAME}`)
     .all();
-  return results;
+  // Cronológico por año+mes del nombre ("Inglés - 2026 Octubre"):
+  // ago → sep → oct → nov. Sin fecha parseable, al final alfabético.
+  return [...results].sort((a, b) => {
+    const ra = sheetRank(a?.name);
+    const rb = sheetRank(b?.name);
+    if (ra !== null && rb !== null) return ra - rb;
+    if (ra !== null) return -1;
+    if (rb !== null) return 1;
+    return String(a?.name || "").localeCompare(String(b?.name || ""), "es");
+  });
+}
+
+const SHEET_MONTHS = Object.freeze({
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+});
+
+function sheetRank(name) {
+  const t = String(name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const m = t.match(/((?:19|20)\d{2})\s+([a-z]+)/);
+  const month = m && SHEET_MONTHS[m[2]];
+  if (!m || !month) return null;
+  return Number(m[1]) * 12 + month;
 }
 
 export function getSheetById(db, id) {

@@ -62,50 +62,50 @@ export function App() {
     <div class="min-h-screen bg-background text-foreground">
       <div class="mx-auto w-full max-w-[680px] px-4 pb-10 pt-8">
         <header class="mb-4 flex items-center gap-2">
-          <div class="flex shrink-0 items-center gap-2">
+          <div class="flex min-w-0 shrink-0 items-center gap-2">
             <img src="/icons.svg" alt="Tinta" class="size-7 rounded-md" />
-            <p class="font-display text-[17px] font-semibold tracking-tight">Tinta</p>
+            <p class="font-display truncate text-[17px] font-semibold tracking-tight">Tinta</p>
             {USE_MOCK && (
               <span class="font-data rounded-full bg-chart-2/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-foreground">
                 mock
               </span>
             )}
           </div>
-        </header>
-        <div class="mb-5 flex gap-2">
-          <div class="min-w-0 flex-1">
-            <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
+          <div class="ml-auto flex shrink-0 items-center gap-2">
+            <Select value={vista} onValueChange={setVista}>
+              <SelectTrigger aria-label="Vista" className="font-display h-10 w-auto shrink-0 gap-2 rounded-full border-0 bg-muted px-4 text-[15px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
+                <SelectValue>
+                  <span class="flex items-center gap-2">
+                    <current.Icon class="size-4 text-muted-foreground" />
+                    {current.label}
+                  </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {VISTAS.map((v) => (
+                  <SelectItem key={v.value} value={v.value} className="py-2.5 text-[15px]">
+                    <v.Icon class="size-4 text-muted-foreground" />
+                    {v.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              onClick={openNew}
+              title="Registrar"
+              aria-label="Registrar"
+              class="flex size-10 shrink-0 items-center justify-center rounded-full bg-chart-2 text-background shadow transition-transform duration-150 active:scale-90"
+            >
+              <Plus class="size-5" />
+            </button>
           </div>
-          <Select value={vista} onValueChange={setVista}>
-            <SelectTrigger aria-label="Vista" className="font-display h-auto w-auto shrink-0 gap-2 rounded-md border-0 bg-muted px-4 py-2 text-[17px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
-              <SelectValue>
-                <span class="flex items-center gap-2">
-                  <current.Icon class="size-4 text-muted-foreground" />
-                  {current.label}
-                </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {VISTAS.map((v) => (
-                <SelectItem key={v.value} value={v.value} className="py-2.5 text-[15px]">
-                  <v.Icon class="size-4 text-muted-foreground" />
-                  {v.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        </header>
+        <div class="mb-5">
+          <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
         </div>
         <Graph names={sheets.names} vista={vista} onEdit={openEdit} />
       </div>
-      <button
-        type="button"
-        onClick={openNew}
-        title="Registrar"
-        aria-label="Registrar"
-        class="fixed bottom-8 right-4 z-40 flex size-14 items-center justify-center rounded-full bg-chart-2 text-background shadow-lg transition-transform duration-150 active:scale-80"
-      >
-        <Plus class="size-6" />
-      </button>
       <Modal open={regOpen} onClose={closeReg} label={editing ? "Editar" : "Registrar"}>
         {regOpen && <Registro key={editing?.row || "new"} sheet={sheet} editing={editing} onSaved={closeReg} />}
       </Modal>

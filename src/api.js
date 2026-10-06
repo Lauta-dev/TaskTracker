@@ -30,17 +30,13 @@ const QP = Object.freeze({ SHEET: "sheet" });
 /* Resultado de postEntry: lo consume Registro ("queued" muestra aviso). */
 const SEND = Object.freeze({ SENT: "sent", QUEUED: "queued" });
 
-// Mock de respaldo: VITE_USE_MOCK=1 en el .env (y reiniciar).
-export const USE_MOCK = import.meta.env?.VITE_USE_MOCK === "1";
+// Mock automático: en dev (vite dev) se usan los datos congelados;
+// el build de prod va contra la API real.
+export const USE_MOCK = import.meta.env?.DEV === true;
 let mockCache = null;
 async function mockData() {
   if (!mockCache) mockCache = (await import("./mock/data.json")).default;
   return mockCache;
-}
-let monthlyCache = null;
-async function monthlyMock() {
-  if (!monthlyCache) monthlyCache = (await import("./mock/monthly.json")).default;
-  return monthlyCache;
 }
 
 // Nombres creados sin conexión, pendientes de subir al servidor.
@@ -281,26 +277,37 @@ function shortMonth(name) {
   return parts[parts.length - 1] || t;
 }
 
-/** Totales por mes para el pie: 2 GET (sheets + rows) y se agrupa acá. */
+/** Totales por mes para el pastel: 2 GET (sheets + rows) y se agrupa acá.
+ * En mock se agrupa igual desde data.json (una hoja ≈ un mes). */
 export async function getMonthlyTotals() {
-  if (USE_MOCK) {
-    const m = await monthlyMock();
-    return Array.isArray(m) ? m.filter((d) => d && typeof d.total === "number") : [];
-  }
-  const [sheets, rows] = await Promise.all([req(EP.SHEETS), req(EP.ROWS)]);
-  const nameById = new Map((Array.isArray(sheets) ? sheets : []).map((s) => [s?.id, s?.name]));
   const totals = new Map();
-  for (const e of Array.isArray(rows) ? rows : []) {
-    const r = normalizeEntry(e);
-    const name = nameById.get(e?.sheet_id);
-    if (!r || !name) continue;
-    totals.set(name, (totals.get(name) || 0) + r.secs);
+  if (USE_MOCK) {
+    const m = await mockData();
+    for (const name of m.sheets || []) {
+      let t = 0;
+      for (const r of parseRows(m.rows?.[name] || [])) t += r.secs;
+      if (t > 0) totals.set(name, t);
+    }
+  } else {
+    const [sheets, rows] = await Promise.all([req(EP.SHEETS), req(EP.ROWS)]);
+    const arr = Array.isArray(sheets) ? sheets : [];
+    const secsById = new Map();
+    for (const e of Array.isArray(rows) ? rows : []) {
+      const r = normalizeEntry(e);
+      if (!r || typeof e?.sheet_id !== "number") continue;
+      secsById.set(e.sheet_id, (secsById.get(e.sheet_id) || 0) + r.secs);
+    }
+    // El orden lo define la API (/sheets cronológico): acá no se sortea.
+    for (const s of arr) {
+      const total = secsById.get(s?.id) || 0;
+      if (total > 0 && s?.name) totals.set(s.name, total);
+    }
   }
   const out = [];
   for (const [month, total] of totals) {
     if (total > 0) out.push({ month, label: shortMonth(month), total });
   }
-  return out.sort((a, b) => a.label.localeCompare(b.label, "es"));
+  return out;
 }
 
 /* ---------- filas: siempre frescas de la API ---------- */

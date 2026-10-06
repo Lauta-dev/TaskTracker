@@ -1,7 +1,8 @@
-import { useState } from "preact/hooks";
-import { Check, Pencil, Trash2, X } from "lucide-preact";
+import { useEffect, useState } from "preact/hooks";
+import { EllipsisVertical, Pencil, Trash2 } from "lucide-preact";
 import { createSheet, deleteSheet, renameSheet } from "../api.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Modal } from "./ui/modal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,20 +13,41 @@ import {
 } from "./ui/alert-dialog";
 
 /* Selector de hoja con gestionar integrado: elegir, crear, renombrar y
-   eliminar sin salir del dropdown. La hoja activa lleva filete de tinta
-   (chart-2); el resto queda quieto. Copy en voz activa, sentence case. */
+   eliminar. Cada fila lleva un ⋮ compacto que despliega un submenú inline
+   (Cambiar nombre / Eliminar) dentro del propio dropdown. La hoja activa
+   lleva filete de tinta (chart-2); el resto queda quieto.
+   Copy en voz activa, sentence case. */
 export function SheetPicker({ names, sheet, onPick, onListChanged }) {
   const [newName, setNewName] = useState("");
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [editValue, setEditValue] = useState("");
-  const [editError, setEditError] = useState("");
+  const [menuFor, setMenuFor] = useState(null);
+  const [menuPos, setMenuPos] = useState(null);
+  const [renaming, setRenaming] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const list = names || [];
+
+  // El menú flotante se cierra al scrollear o rotar, como el del drawer.
+  useEffect(() => {
+    if (!menuFor) return;
+    const close = () => setMenuFor(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [menuFor]);
+
+  function pick(name) {
+    setMenuFor(null);
+    onPick?.(name);
+  }
 
   async function create() {
     const clean = newName.trim();
@@ -44,49 +66,55 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
     setNewName("");
     setCreating(false);
     onListChanged?.();
-    onPick?.(clean);
+    pick(clean);
   }
 
-  function startEdit(name) {
-    setEditing(name);
-    setEditValue(name);
-    setEditError("");
+  function startRename(name) {
+    setMenuFor(null);
+    setRenaming(name);
+    setRenameValue(name);
+    setRenameError("");
   }
 
-  function cancelEdit() {
+  function cancelRename() {
     if (saving) return;
-    setEditing(null);
-    setEditError("");
+    setRenaming(null);
+    setRenameError("");
   }
 
-  async function saveEdit() {
-    const from = editing;
-    const clean = editValue.trim();
+  async function saveRename() {
+    const from = renaming;
+    const clean = renameValue.trim();
     if (!from || saving) return;
     if (!clean) {
-      setEditError("Escribí un nombre.");
+      setRenameError("Escribí un nombre.");
       return;
     }
     if (clean === from) {
-      setEditing(null);
+      setRenaming(null);
       return;
     }
     if (list.includes(clean)) {
-      setEditError("Ya existe una hoja con ese nombre.");
+      setRenameError("Ya existe una hoja con ese nombre.");
       return;
     }
     setSaving(true);
-    setEditError("");
+    setRenameError("");
     try {
       await renameSheet(from, clean);
-      setEditing(null);
+      setRenaming(null);
       onListChanged?.();
-      if (sheet === from) onPick?.(clean);
+      if (sheet === from) pick(clean);
     } catch (e) {
-      setEditError(e?.message || "No se pudo guardar.");
+      setRenameError(e?.message || "No se pudo guardar.");
     } finally {
       setSaving(false);
     }
+  }
+
+  function askDelete(name) {
+    setMenuFor(null);
+    setPendingDelete(name);
   }
 
   async function confirmDelete() {
@@ -103,7 +131,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
     onListChanged?.();
     if (sheet === target) {
       const next = list.filter((n) => n !== target)[0] || "";
-      onPick?.(next);
+      pick(next);
     }
   }
 
@@ -113,7 +141,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
 
   return (
     <div class="w-full">
-      <Select value={sheet} onValueChange={onPick}>
+      <Select value={sheet} onValueChange={pick}>
         <SelectTrigger className="font-display h-auto w-full gap-2 rounded-md border-0 bg-muted px-4 py-2 text-[17px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
           <SelectValue>{sheet || "Elegí hoja"}</SelectValue>
         </SelectTrigger>
@@ -123,89 +151,65 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
           )}
           {list.map((n) => {
             const active = n === sheet;
-            if (editing === n) {
-              return (
-                <div key={n} class="rounded-sm bg-accent/60 p-1">
-                  <div class="flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={editValue}
-                      maxLength={120}
-                      disabled={saving}
-                      autoFocus
-                      onInput={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === "Enter") saveEdit();
-                        if (e.key === "Escape") cancelEdit();
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Nuevo nombre para "${n}"`}
-                      class="h-8 min-w-0 flex-1 rounded-sm bg-background px-2 text-[14px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                    />
+            const menuOpen = menuFor === n;
+            return (
+              <div key={n} class={`relative rounded-sm ${active ? "bg-accent/60" : ""}`}>
+                <div class="flex items-center gap-0.5">
+                  <span
+                    aria-hidden="true"
+                    class={`w-0.5 self-stretch rounded-full ${active ? "bg-chart-2" : "bg-transparent"}`}
+                  />
+                  <SelectItem value={n} className="min-w-0 flex-1 py-2.5 text-[15px]">
+                    <span class={`block truncate ${active ? "font-display font-semibold" : ""}`}>{n}</span>
+                  </SelectItem>
+                  <button
+                    type="button"
+                    title={`Opciones de "${n}"`}
+                    aria-label={`Opciones de "${n}"`}
+                    aria-expanded={menuOpen}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (menuOpen) {
+                        setMenuFor(null);
+                        return;
+                      }
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setMenuPos({
+                        top: Math.min(r.bottom + 6, window.innerHeight - 140),
+                        right: Math.max(8, window.innerWidth - r.right),
+                      });
+                      setMenuFor(n);
+                    }}
+                    class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground active:bg-muted hover:text-foreground"
+                  >
+                    <EllipsisVertical class="size-4" />
+                  </button>
+                </div>
+                {menuOpen && (
+                  <div
+                    role="menu"
+                    aria-label={`Opciones de "${n}"`}
+                    style={{ position: "fixed", top: menuPos?.top ?? 0, right: menuPos?.right ?? 8 }}
+                    class="z-[60] w-52 rounded-xl border border-border bg-card p-1 shadow-lg animate-in fade-in-0 zoom-in-95 duration-150"
+                  >
                     <button
                       type="button"
-                      onClick={saveEdit}
-                      disabled={saving}
-                      title="Guardar"
-                      aria-label="Guardar nombre"
-                      class="flex size-8 shrink-0 items-center justify-center rounded-sm bg-chart-2 text-background active:opacity-90 disabled:opacity-50"
+                      role="menuitem"
+                      onClick={() => startRename(n)}
+                      class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[14px] font-medium text-foreground active:bg-muted"
                     >
-                      <Check class="size-4" />
+                      <Pencil class="size-5" /> Cambiar nombre
                     </button>
                     <button
                       type="button"
-                      onClick={cancelEdit}
-                      disabled={saving}
-                      title="Cancelar"
-                      aria-label="Cancelar"
-                      class="flex size-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      role="menuitem"
+                      onClick={() => askDelete(n)}
+                      class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[14px] font-medium text-destructive active:bg-muted"
                     >
-                      <X class="size-4" />
+                      <Trash2 class="size-5" /> Eliminar
                     </button>
                   </div>
-                  {editError && <p class="px-1 pb-1 pt-1 text-[12px] text-destructive">{editError}</p>}
-                </div>
-              );
-            }
-            return (
-              <div
-                key={n}
-                class={`group flex items-center gap-0.5 rounded-sm ${active ? "bg-accent/60" : ""}`}
-              >
-                <span
-                  aria-hidden="true"
-                  class={`w-0.5 self-stretch rounded-full ${active ? "bg-chart-2" : "bg-transparent"}`}
-                />
-                <SelectItem value={n} className="min-w-0 flex-1 py-2.5 text-[15px]">
-                  <span class={`block truncate ${active ? "font-display font-semibold" : ""}`}>{n}</span>
-                </SelectItem>
-                <span class="flex shrink-0 items-center">
-                  <button
-                    type="button"
-                    title={`Cambiar nombre de "${n}"`}
-                    aria-label={`Cambiar nombre de "${n}"`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEdit(n);
-                    }}
-                    class="rounded-sm p-2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <Pencil class="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    title={`Eliminar "${n}"`}
-                    aria-label={`Eliminar "${n}"`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPendingDelete(n);
-                    }}
-                    class="rounded-sm p-2 text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <Trash2 class="size-4" />
-                  </button>
-                </span>
+                )}
               </div>
             );
           })}
@@ -241,6 +245,46 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
           </div>
         </SelectContent>
       </Select>
+
+      <Modal open={renaming !== null} onClose={cancelRename} label="Cambiar nombre">
+        <h2 class="font-display text-[17px] font-semibold tracking-tight">Cambiar nombre</h2>
+        <p class="mt-0.5 truncate text-[13px] text-muted-foreground">{renaming}</p>
+        <input
+          type="text"
+          value={renameValue}
+          maxLength={120}
+          disabled={saving}
+          autoFocus
+          onInput={(e) => {
+            setRenameValue(e.target.value);
+            if (renameError) setRenameError("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") saveRename();
+          }}
+          aria-label="Nuevo nombre de la hoja"
+          class="mt-3 h-11 w-full rounded-xl border border-input bg-background px-3 text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+        />
+        {renameError && <p class="pt-1 text-[12px] text-destructive">{renameError}</p>}
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={cancelRename}
+            disabled={saving}
+            class="inline-flex min-h-11 items-center justify-center rounded-xl border border-border px-4 text-[14px] font-medium active:scale-95 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={saveRename}
+            disabled={saving || !renameValue.trim()}
+            class="inline-flex min-h-11 items-center justify-center rounded-xl bg-chart-2 px-4 text-[14px] font-medium text-background active:scale-95 disabled:opacity-50"
+          >
+            {saving ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      </Modal>
 
       <AlertDialog
         open={pendingDelete !== null}

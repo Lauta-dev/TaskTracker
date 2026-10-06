@@ -2,36 +2,34 @@ import { useState } from "preact/hooks";
 import { fmtTotal } from "../format.js";
 
 const COLORS = [
-  "oklch(0.55 0.22 292)", // violeta (acento de la app)
+  "oklch(0.63 0.17 150)", // verde (acento de la app)
+  "oklch(0.55 0.22 292)", // violeta
   "oklch(0.65 0.14 190)", // teal
   "oklch(0.7 0.15 80)", // ámbar
   "oklch(0.6 0.17 255)", // azul
   "oklch(0.63 0.2 25)", // coral
-  "oklch(0.63 0.17 150)", // verde
 ];
 
 const CX = 100;
 const CY = 100;
 const R = 88;
-const IR = 44;
+const LABEL_R = 57;
 
 function polar(cx, cy, r, deg) {
   const rad = ((deg - 90) * Math.PI) / 180;
   return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
 }
 
-/** Anillo: sector entre a0 y a1 (grados). */
-function donutPath(a0, a1) {
+/** Torta: sector entre a0 y a1 (grados) desde el centro. */
+function piePath(a0, a1) {
   const large = a1 - a0 > 180 ? 1 : 0;
   const [x0, y0] = polar(CX, CY, R, a0);
   const [x1, y1] = polar(CX, CY, R, a1);
-  const [x2, y2] = polar(CX, CY, IR, a1);
-  const [x3, y3] = polar(CX, CY, IR, a0);
-  return `M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} L ${x2} ${y2} A ${IR} ${IR} 0 ${large} 0 ${x3} ${y3} Z`;
+  return `M ${CX} ${CY} L ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} Z`;
 }
 
 /**
- * Dona SVG puro: duraciones totales por mes.
+ * Torta SVG pura: duraciones totales por mes.
  * data: [{ label, total }] — total en segundos.
  * Checkbox por mes para activar/desactivar; clic en slice o fila para detalle.
  */
@@ -71,7 +69,7 @@ export function Pie({ data = [] }) {
   return (
     <div class="rounded-md border border-border bg-card px-4 py-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-      <div class="relative mx-auto w-full max-w-[260px] sm:mx-0 sm:w-[220px] sm:shrink-0">
+      <div class="mx-auto w-full max-w-[260px] sm:mx-0 sm:w-[220px] sm:shrink-0">
         {active.length === 0 ? (
           <div class="flex aspect-square w-full items-center justify-center rounded-full border-2 border-dashed border-border px-6 text-center">
             <p class="text-sm text-muted-foreground">Activá al menos un mes.</p>
@@ -83,10 +81,8 @@ export function Pie({ data = [] }) {
             <circle
               cx={CX}
               cy={CY}
-              r={(R + IR) / 2}
-              fill="none"
-              stroke={segs[0].color}
-              stroke-width={R - IR}
+              r={R}
+              fill={segs[0].color}
             >
               <title>{`${segs[0].label}: ${fmtTotal(segs[0].total)} (100%)`}</title>
             </circle>
@@ -95,10 +91,8 @@ export function Pie({ data = [] }) {
             {segs.map((s) => (
               <path
                 key={s.label}
-                d={donutPath(s.a0, s.a1)}
+                d={piePath(s.a0, s.a1)}
                 fill={s.color}
-                stroke="var(--color-background)"
-                stroke-width="3"
                 tabindex="0"
                 role="button"
                 aria-pressed={sel === s.label}
@@ -117,7 +111,7 @@ export function Pie({ data = [] }) {
             ))}
             {segs.filter((s) => s.pct >= 12).map((s) => {
               const mid = (s.a0 + s.a1) / 2;
-              const [tx, ty] = polar(CX, CY, (R + IR) / 2, mid);
+              const [tx, ty] = polar(CX, CY, LABEL_R, mid);
               return (
                 <text
                   key={"t-" + s.label}
@@ -130,7 +124,7 @@ export function Pie({ data = [] }) {
                   font-size="13"
                   font-weight="700"
                   opacity={sel === null || sel === s.label ? 1 : 0.35}
-                  style={{ paintOrder: "stroke", stroke: "rgba(0,0,0,0.3)", strokeWidth: "3px", transition: "opacity 200ms" }}
+                  style={{ paintOrder: "stroke", stroke: "rgba(0,0,0,0.65)", strokeWidth: "4px", strokeLinejoin: "round", transition: "opacity 200ms" }}
                 >
                   {Math.round(s.pct)}%
                 </text>
@@ -139,18 +133,6 @@ export function Pie({ data = [] }) {
             </>
           )}
         </svg>
-        <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <p class="flex items-center justify-center gap-1.5 font-data text-[10px] uppercase tracking-widest text-muted-foreground">
-            {current && <span class="inline-block size-2.5 rounded-sm" style={{ background: current.color }} />}
-            {current ? current.label : "Total"}
-          </p>
-          <p class="font-data text-[22px] font-bold leading-tight">
-            {fmtTotal(current ? current.total : grand)}
-          </p>
-          <p class="font-data text-[11px] text-muted-foreground">
-            {current ? `${Math.round(current.pct)}% del total` : `${active.length} ${active.length === 1 ? "mes" : "meses"}`}
-          </p>
-        </div>
         </>
         )}
       </div>
@@ -186,6 +168,22 @@ export function Pie({ data = [] }) {
         })}
       </ul>
       </div>
+      {active.length > 0 && (
+        <div class="-mx-4 -mb-4 mt-4 flex items-baseline justify-between gap-2 rounded-b-md border-t border-border bg-muted/50 px-4 py-3">
+          <div class="min-w-0">
+            <p class="flex items-center gap-1.5 font-data text-[10px] uppercase tracking-widest text-muted-foreground">
+              {current && <span class="inline-block size-2.5 shrink-0 rounded-sm" style={{ background: current.color }} />}
+              <span class="truncate">{current ? current.label : "Total"}</span>
+            </p>
+            <p class="font-data text-[20px] font-bold leading-tight">
+              {fmtTotal(current ? current.total : grand)}
+            </p>
+          </div>
+          <p class="font-data shrink-0 text-[12px] text-muted-foreground">
+            {current ? `${Math.round(current.pct)}% del total` : `${active.length} ${active.length === 1 ? "mes" : "meses"}`}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
