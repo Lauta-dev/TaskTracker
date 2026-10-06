@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
 import { ChartColumn, ChartPie, LayoutGrid, Plus, Table } from "lucide-preact";
 import { useSheets } from "./hooks/useSheets";
@@ -28,7 +28,15 @@ export function App() {
   const current = VISTAS.find((v) => v.value === vista) || VISTAS[0];
 
   // La lista se pide una sola vez acá y baja por props.
-  const sheet = resolveSheet(search, sheets.names || []);
+  // Se pasa `names` sin forzar []: null = aún cargando (resolveSheet usa
+  // ?sheet=/última para mostrar datos enseguida).
+  const sheet = resolveSheet(search, sheets.names);
+
+  // La resuelta es la última usada: persiste en localStorage para que el
+  // próximo arranque (y el fetch de filas) la reutilice si existe.
+  useEffect(() => {
+    if (sheet) saveLastSheet(sheet);
+  }, [sheet]);
 
   function pick(name) {
     saveLastSheet(name);
@@ -48,11 +56,6 @@ export function App() {
   function closeReg() {
     setRegOpen(false);
     setEditing(null);
-  }
-
-  function pick(name) {
-    saveLastSheet(name);
-    navigate(`/?sheet=${encodeURIComponent(name)}`);
   }
 
   return (

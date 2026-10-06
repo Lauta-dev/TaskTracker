@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { MSG, PARAM } from "../constants.js";
-import { createSheet, deleteSheet, getSheetById, getSheetByName, listSheets } from "../db/sheets.js";
+import { createSheet, deleteSheet, getSheetById, getSheetByName, listSheets, renameSheet } from "../db/sheets.js";
 import { listEntries } from "../db/entries.js";
 import { fail, HttpError, ok, STATUS } from "../http.js";
-import { parseId, validateSheetCreate } from "../validators.js";
+import { parseId, validateSheetCreate, validateSheetUpdate } from "../validators.js";
 
 const sheets = new Hono();
 
@@ -46,6 +46,23 @@ sheets.delete(`/:${PARAM.ID}`, async (c) => {
       throw new HttpError(STATUS.NOT_FOUND, MSG.SHEET_NOT_FOUND);
     }
     return ok(c, { deleted: id });
+  } catch (e) {
+    return fail(c, e);
+  }
+});
+
+sheets.patch(`/:${PARAM.ID}`, async (c) => {
+  try {
+    const id = parseId(c.req.param(PARAM.ID));
+    const { name } = validateSheetUpdate(await c.req.json());
+    const current = await getSheetById(c.env.DB, id);
+    if (!current) {
+      throw new HttpError(STATUS.NOT_FOUND, MSG.SHEET_NOT_FOUND);
+    }
+    if (current.name !== name && (await getSheetByName(c.env.DB, name))) {
+      throw new HttpError(STATUS.CONFLICT, MSG.SHEET_EXISTS);
+    }
+    return ok(c, await renameSheet(c.env.DB, id, name));
   } catch (e) {
     return fail(c, e);
   }

@@ -172,6 +172,57 @@ export async function deleteSheet(name) {
   return true;
 }
 
+/* Renombra en servidor y/o local. Actualiza última hoja y cola pendiente.
+   Lanza Error con el mensaje a mostrar ("Ya existe...", sin conexión, etc.). */
+export async function renameSheet(oldName, newName) {
+  const from = String(oldName || "").trim();
+  const clean = String(newName || "").trim();
+  if (!from || !clean) throw new Error("Escribí un nombre.");
+  if (clean === from) return true;
+  if (clean.length > 120) throw new Error("Máximo 120 caracteres.");
+  const locals = localSheets();
+  const wasLocal = locals.includes(from);
+  const clashLocal = locals.includes(clean);
+
+  // Cola y última hoja siguen al nuevo nombre aunque falle la red.
+  set(PENDING_KEY, pending().map((p) => (p.sheet === from ? { ...p, sheet: clean } : p)));
+  if (get(LAST_KEY, "") === from) set(LAST_KEY, clean);
+
+  if (USE_MOCK) {
+    if (wasLocal || !clashLocal) {
+      set(SHEETS_KEY, locals.map((n) => (n === from ? clean : n)));
+      return true;
+    }
+    throw new Error("Ya existe una hoja con ese nombre.");
+  }
+
+  try {
+    const sheets = await req(EP.SHEETS);
+    const arr = Array.isArray(sheets) ? sheets : [];
+    if (arr.some((s) => s?.name === clean)) throw new Error("Ya existe una hoja con ese nombre.");
+    const found = arr.find((s) => s?.name === from);
+    if (found) {
+      await req(`${EP.SHEETS}/${found.id}`, { method: "PATCH", body: { name: clean } });
+      // Servidor manda: sale de la lista local en ambos extremos.
+      set(SHEETS_KEY, localSheets().filter((n) => n !== from && n !== clean));
+      return true;
+    }
+  } catch (e) {
+    if (e?.status === 409 || /ya existe/i.test(e?.message || "")) {
+      throw new Error("Ya existe una hoja con ese nombre.");
+    }
+    if (e?.status) throw e;
+    // Sin red: cae al renombre local.
+  }
+
+  if (wasLocal) {
+    if (clashLocal) throw new Error("Ya existe una hoja con ese nombre.");
+    set(SHEETS_KEY, locals.map((n) => (n === from ? clean : n)));
+    return true;
+  }
+  throw new Error("Sin conexión: no se pudo renombrar.");
+}
+
 export function lastSheet() {
   return get(LAST_KEY, "");
 }

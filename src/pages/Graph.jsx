@@ -30,6 +30,20 @@ const LEVEL_BG = [
   "bg-chart-2",
 ];
 
+/* Esquinas expuestas: redondea arriba donde la celda no tiene día vecino
+   (ni arriba ni al costado). Abajo nunca: el cierre lo da el pie de stats.
+   `hasDay(pos)` dice si esa posición de la grilla de 7 columnas tiene día. */
+function exposedCorners(pos, hasDay) {
+  const col = pos % 7;
+  const above = pos >= 7 && hasDay(pos - 7);
+  const left = col > 0 && hasDay(pos - 1);
+  const right = col < 6 && hasDay(pos + 1);
+  return [
+    !above && !left && "rounded-tl-md",
+    !above && !right && "rounded-tr-md",
+  ].filter(Boolean).join(" ");
+}
+
 export function Graph({ names, onEdit, vista = "grilla" }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
@@ -103,16 +117,12 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
   const now = currentMonth();
   // Skeleton con la forma del mes actual del dispositivo.
   const skelCells = monthCells(now.y, now.m);
-  let skelFirst = -1, skelLast = -1;
+  let skelLast = -1;
   skelCells.forEach((c, i) => {
     if (c === null) return;
-    if (skelFirst === -1) skelFirst = i;
     skelLast = i;
   });
-  const skelCorner = (i) => [
-    (i === skelFirst || (skelFirst > 0 && i === 7)) && "rounded-tl-md",
-    i === 6 && "rounded-tr-md",
-  ].filter(Boolean).join(" ");
+  const skelHas = (p) => skelCells[p] !== null;
   let y = now.y, m = now.m;
   const fromName = monthFromSheetName(sheet);
   if (fromName) {
@@ -198,22 +208,14 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
   );
 
   // Celdas vacías después del último día → total del mes.
-  let firstIdx = -1, lastIdx = -1;
+  let lastIdx = -1;
   cells.forEach((c, i) => {
     if (c === null) return;
-    if (firstIdx === -1) firstIdx = i;
     lastIdx = i;
   });
+  const hasDay = (p) => cells[p] != null;
   const monthTotal = [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
   const today = dayKey(new Date());
-  // Esquinas redondeadas puntuales de la grilla (solo arriba).
-  // El arriba-izq va al primer día visible; el de la segunda semana solo
-  // si la primera fila no está completa (mes que no arranca lunes).
-  // La última fila queda cuadrada: el cierre lo da el pie de stats.
-  const corner = (i) => [
-    (i === firstIdx || (firstIdx > 0 && i === 7)) && "rounded-tl-md",
-    i === 6 && "rounded-tr-md",
-  ].filter(Boolean).join(" ");
   // Intensidad del bloque total: promedio por día activo vs mejor día.
   const monthLv = level(monthTotal > 0 && dayInfo.size > 0 ? monthTotal / (maxSecs * dayInfo.size) : 0);
   const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-background" : "text-foreground";
@@ -230,7 +232,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
   return (
     <div>
       <div class="mb-4">
-        {list.length === 0 && apiRows !== null && (
+        {list.length === 0 && !sheet && apiRows !== null && (
           <p class="text-sm text-muted-foreground">No hay hojas. Creá una desde el selector.</p>
         )}
         <p class="font-data mt-2 text-[11px] uppercase tracking-widest text-muted-foreground">{monthName}</p>
@@ -283,7 +285,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
         {apiRows === null
           ? skelCells.map((c, i) => {
               if (c === null) {
-                if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" class={skelCorner(i)} />;
+                if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" />;
                 if (i !== skelLast + 1) return null;
                 const span = skelCells.length - 1 - skelLast;
                 return (
@@ -300,13 +302,13 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
                   key={"s" + i}
                   aria-hidden="true"
                   style={{ animationDelay: `${(i % 7) * 60}ms` }}
-                  class={`aspect-square w-full animate-pulse bg-muted ${skelCorner(i)}`}
+                  class={`aspect-square w-full animate-pulse bg-muted ${exposedCorners(i, skelHas)}`}
                 />
               );
             })
           : cells.map((d, i) => {
           if (d == null) {
-            if (i <= lastIdx) return <div key={"x" + i} class={corner(i)} />;
+            if (i <= lastIdx) return <div key={"x" + i} />;
             // Relleno final: un solo bloque que ocupa todos los espacios.
             if (i !== lastIdx + 1) return null;
             const span = cells.length - 1 - lastIdx;
@@ -328,13 +330,15 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
           const lv = level(d.total / maxSecs);
           // lv 0: apagado · lv 1-2: texto del tema · lv 3-4: lleno → texto del fondo
           const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-background" : "text-foreground";
+          const cc = exposedCorners(i, hasDay);
+          const ccTl = cc.includes("rounded-tl");
           return (
             <button
               type="button"
               key={d.key}
               onClick={() => openDay(d.key)}
               title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-              class={`relative aspect-square w-full cursor-pointer overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${d.key === today ? "" : corner(i)} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              class={`relative aspect-square w-full cursor-pointer overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${cc} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
             >
               <span class="absolute inset-0 flex flex-col justify-between p-1.5">
                 {d.key === today ? (
@@ -353,7 +357,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
                 )}
               </span>
               {d.key === today && (
-                <span class="absolute left-0 top-0 rounded-br-xl border-b border-r border-chart-2 bg-chart-2 p-1.5">
+                <span class={`absolute left-0 top-0 border-b border-r border-chart-2 bg-chart-2 p-1.5 ${ccTl ? "rounded-tl-md rounded-br-xl" : "rounded-br-xl"}`}>
                   <span class="block font-data text-[12px] font-bold leading-none text-background sm:text-[14px]">
                     {d.day}
                   </span>

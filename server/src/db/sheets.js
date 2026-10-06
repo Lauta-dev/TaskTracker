@@ -33,3 +33,10 @@ export async function deleteSheet(db, id) {
   const [, sheetRes] = await db.batch(stmts);
   return sheetRes.meta.changes > 0;
 }
+
+/* Renombra la hoja. Devuelve la fila o null si no existe. */
+export async function renameSheet(db, id, name) {
+  const res = await db.prepare('UPDATE "sheets" SET "name" = ? WHERE "id" = ?').bind(name, id).run();
+  if (res.meta.changes === 0) return null;
+  return getSheetById(db, id);
+}

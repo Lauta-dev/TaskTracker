@@ -4,14 +4,17 @@ export function sheetFromSearch(search) {
   return new URLSearchParams(search || "").get("sheet") || "";
 }
 
-/** ?sheet= manda si está en la lista o es local (recién creada);
- * si no, última válida; si no, primera. */
+/** Prioridad: ?sheet=, última guardada, primera de la lista.
+ * Si la lista aún no cargó (null) se confía en ?sheet=/última para poder
+ * pedir filas enseguida; al cargar se valida contra la lista. */
 export function resolveSheet(search, names) {
+  const q = sheetFromSearch(search);
+  const last = lastSheet();
+  if (!names) return q || last || "";
   const list = names || [];
   const locals = localSheets();
-  const q = sheetFromSearch(search);
-  if (q && (list.includes(q) || locals.includes(q))) return q;
-  const last = lastSheet();
-  if (last && (list.includes(last) || locals.includes(last))) return last;
-  return list[0] || "";
+  const known = (n) => list.includes(n) || locals.includes(n);
+  if (q && known(q)) return q;
+  if (last && known(last)) return last;
+  return list[0] || q || last || "";
 }

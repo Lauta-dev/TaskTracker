@@ -29,6 +29,11 @@ export function validateSheetCreate(body) {
   return { name };
 }
 
+/* PATCH /sheets/:id: mismo contrato que crear. */
+export function validateSheetUpdate(body) {
+  return validateSheetCreate(body);
+}
+
 /* POST /entries: devuelve { entry, sheetId?, sheetName? } ya normalizado. */
 export function validateEntryCreate(body) {
   const entry = {};
