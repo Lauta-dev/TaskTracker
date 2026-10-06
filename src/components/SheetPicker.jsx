@@ -189,7 +189,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
                       e.stopPropagation();
                       startEdit(n);
                     }}
-                    class="rounded-sm p-2 text-muted-foreground opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                    class="rounded-sm p-2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <Pencil class="size-4" />
                   </button>
@@ -201,7 +201,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
                       e.stopPropagation();
                       setPendingDelete(n);
                     }}
-                    class="rounded-sm p-2 text-muted-foreground opacity-100 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                    class="rounded-sm p-2 text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <Trash2 class="size-4" />
                   </button>
