@@ -332,13 +332,16 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
           const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-background" : "text-foreground";
           const cc = exposedCorners(i, hasDay);
           const ccTl = cc.includes("rounded-tl");
+          // Solo los días con datos abren el drawer (los vacíos no son botón).
+          const hasData = d.total > 0;
           return (
             <button
               type="button"
               key={d.key}
+              disabled={!hasData}
               onClick={() => openDay(d.key)}
               title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-              class={`relative aspect-square w-full cursor-pointer overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${cc} focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              class={`relative aspect-square w-full overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${cc} ${hasData ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" : "cursor-default"}`}
             >
               <span class="absolute inset-0 flex flex-col justify-between p-1.5">
                 {d.key === today ? (
