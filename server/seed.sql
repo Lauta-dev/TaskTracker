@@ -1,4 +1,4 @@
--- Seed generado desde la API GAS. Ejecutar en D1 DESPUÉS de schema.sql.
+-- Seed inicial de ejemplo. Ejecutar en D1 DESPUÉS de schema.sql.
 -- Orden: primero sheets (incluye hojas vacías), luego entries.
 
 INSERT OR IGNORE INTO sheets (name) VALUES ('Inglés - 2026 Septiembre');

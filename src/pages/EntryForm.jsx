@@ -145,7 +145,7 @@ export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
                   setRecurso(p.recs?.[0] || "—");
                 }}
                 aria-pressed={area === a}
-                class={`flex h-9 items-center justify-center gap-1.5 rounded-sm text-[13px] font-semibold transition-colors ${area === a ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                class={`flex h-9 items-center justify-center gap-1.5 rounded-sm text-[13px] font-semibold transition-colors ${area === a ? "bg-card text-foreground" : "text-muted-foreground"}`}
               >
                 <AreaIcon area={a} class="size-4" />
                 {AREA_LABEL[a]}
@@ -172,6 +172,9 @@ export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
           duracion={duracion}
           setDuracion={setDuracion}
           rows={areaRows}
+          url={url}
+          contenido={contenido}
+          setContenido={setContenido}
         />
 
         <ContentField

@@ -190,7 +190,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
                     role="menu"
                     aria-label={`Opciones de "${n}"`}
                     style={{ position: "fixed", top: menuPos?.top ?? 0, right: menuPos?.right ?? 8 }}
-                    class="z-[60] w-52 rounded-xl border border-border bg-card p-1 shadow-lg animate-in fade-in-0 zoom-in-95 duration-150"
+                    class="z-[60] w-52 rounded-xl border border-border bg-card p-1 animate-in fade-in-0 zoom-in-95 duration-150"
                   >
                     <button
                       type="button"

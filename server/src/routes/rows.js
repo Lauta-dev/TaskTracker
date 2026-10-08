@@ -9,7 +9,7 @@ import { requireAuth } from "../auth.js";
 /* Alias de lectura para la migración del frontend:
    GET /rows                → todo
    GET /rows?sheetId=1      → por id
-   GET /rows?sheet=Nombre   → por nombre (como el GAS de hoy) */
+   GET /rows?sheet=Nombre   → por nombre */
 const rows = new Hono();
 
 rows.use("*", requireAuth);

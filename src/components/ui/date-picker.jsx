@@ -70,7 +70,7 @@ export function DatePicker({ value, onValueChange, placeholder = "Elegí el día
         aria-expanded={open}
         data-slot="date-picker-trigger"
         onClick={() => setOpen(!open)}
-        class="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-all duration-200 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        class="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none transition-all duration-200 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         {...props}
       >
         <CalendarIcon class="size-4 opacity-50" />
@@ -87,7 +87,7 @@ export function DatePicker({ value, onValueChange, placeholder = "Elegí el día
             if (e.target === e.currentTarget && !open) setPresent(false);
           }}
           class={cn(
-            "absolute left-0 top-full z-50 mt-1 w-[248px] rounded-md bg-popover p-2 text-popover-foreground shadow-xl",
+            "absolute left-0 top-full z-50 mt-1 w-[248px] rounded-md bg-popover p-2 text-popover-foreground",
             open ? "animate-in fade-in-0 zoom-in-95" : "animate-out fade-out-0 zoom-out-95",
           )}
         >

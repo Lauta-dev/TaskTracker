@@ -115,12 +115,14 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     }
   }, [path, names, sheet, search ]);
 
-  // Totales por mes para el pie.
-  // Lazy: solo se pide al abrir la vista pastel.
+  // Totales por mes para el pie, con filtro por área (null = todas).
+  // Lazy: solo se pide al abrir la vista pastel o cambiar el filtro.
+  const [pieArea, setPieArea] = useState(null);
   useEffect(() => {
-    if (vista !== "pastel" || monthly !== null) return;
+    if (vista !== "pastel") return;
     let alive = true;
-    getMonthlyTotals().then((m) => {
+    setMonthly(null);
+    getMonthlyTotals(pieArea).then((m) => {
       if (alive) setMonthly(m);
     }).catch(() => {
       if (alive) setMonthly([]);
@@ -128,7 +130,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     return () => {
       alive = false;
     };
-  }, [vista]);
+  }, [vista, pieArea]);
 
   // Mes a mostrar: lo define la hoja ("Inglés - 2026 Octubre"); las filas
   // solo son fallback para hojas con nombre libre, y el dispositivo si no hay.
@@ -512,7 +514,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
               </div>
             </div>
           ) : (
-            <Pie data={monthly} />
+            <Pie key={pieArea || "all"} data={monthly} area={pieArea} onAreaChange={setPieArea} />
           )}
         </div>
       )}
@@ -588,7 +590,10 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
               </p>
               <div class="mt-1 flex items-baseline justify-between gap-2">
                 <p class="text-[16px] font-semibold md:text-[18px]">
-                  {selDate.toLocaleDateString("es", { day: "numeric", month: "long" })}
+                  {(() => {
+                    const s = selDate.toLocaleDateString("es", { weekday: "long", day: "numeric" }).replace(",", "");
+                    return s.charAt(0).toUpperCase() + s.slice(1);
+                  })()}
                 </p>
                 <p class="font-data text-[16px] font-bold md:text-[18px]">
                   {sel && sel.total > 0 ? fmtTotal(sel.total) : "0m"}

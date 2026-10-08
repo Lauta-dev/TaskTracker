@@ -115,7 +115,7 @@ export function App() {
           </div>
           <div class="order-2 ml-auto flex shrink-0 items-center gap-2 md:order-3 md:ml-0">
             <Select value={vista} onValueChange={setVista}>
-              <SelectTrigger aria-label="Vista" className="font-display h-10 w-auto shrink-0 gap-2 rounded-full border-0 bg-muted px-4 text-[15px] font-semibold shadow-none focus-visible:ring-2 md:h-11 md:px-5 md:text-[16px] [&_[data-slot=select-value]]:min-w-0">
+              <SelectTrigger aria-label="Vista" className="font-display h-10 w-auto shrink-0 gap-2 rounded-md border-0 bg-muted px-4 text-[15px] font-semibold shadow-none focus-visible:ring-2 md:h-11 md:px-5 md:text-[16px] [&_[data-slot=select-value]]:min-w-0">
                 <SelectValue>
                   <span class="flex items-center gap-2">
                     <current.Icon class="size-4 text-muted-foreground" />
@@ -137,7 +137,7 @@ export function App() {
               onClick={openNew}
               title="Registrar"
               aria-label="Registrar"
-              class="flex size-10 shrink-0 items-center justify-center rounded-full bg-chart-2 text-background shadow transition-transform duration-150 active:scale-90"
+              class="flex size-10 shrink-0 items-center justify-center rounded-md bg-chart-2 text-background transition-transform duration-150 active:scale-90"
             >
               <Plus class="size-5" />
             </button>

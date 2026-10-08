@@ -1,6 +1,6 @@
 # Tinta · Log de inmersión
 
-Calendario de horas de inglés: a más horas, más color. App mobile-first instalable (PWA) que lee y escribe en un Google Spreadsheet vía Apps Script.
+Calendario de horas de inglés: a más horas, más color. App mobile-first instalable (PWA) que lee y escribe en su API propia (worker + D1).
 
 ## Vistas
 
@@ -20,21 +20,25 @@ La hoja activa viaja en `?sheet=`. El mes se toma de las filas (o del celu si no
 ## Configuración
 
 ```bash
-cp .env.example .env   # si existe, o crealo con:
-# VITE_GAS_ID=<id del deployment de Apps Script>
+# .env (solo dev)
+VITE_API_BASE=http://127.0.0.1:8787
 ```
 
 ```bash
-npm run dev      # desarrollo con VITE_GAS_ID del .env (reiniciar si cambia)
-npm run build    # producción a dist/ con GAS_ID del entorno
+npm run dev      # desarrollo con VITE_API_BASE del .env (reiniciar si cambia)
+npm run build    # producción a dist/ con API_BASE del entorno
 npm run preview  # probar el build
 ```
 
 ```bash
 # .env (solo dev)
-VITE_GAS_ID=<id del deployment>
-# prod: exportar GAS_ID=<id> antes del build (o en la plataforma)
+VITE_API_BASE=<url de la API>
+VITE_YT_API_KEY=<key de YouTube Data API v3>  # opcional: sin esto, el autollenado de videos trae título pero no duración
+# prod: exportar API_BASE=<url> antes del build (o en la plataforma)
 ```
+
+En inglés, pegar un link de YouTube en URL rellena Contenido (título) y
+Duración (redondeada: resto > 30s sube, si no baja) si están vacíos.
 
 ## Áreas
 

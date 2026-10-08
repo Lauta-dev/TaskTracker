@@ -90,7 +90,7 @@ export function Sheet({ open, onOpenChange, label, children }) {
             : undefined
         }
         class={cn(
-          "absolute inset-x-3 bottom-0 mx-auto max-h-[80dvh] w-auto max-w-[680px] overflow-auto rounded-t-2xl bg-popover text-popover-foreground shadow-xl",
+          "absolute inset-x-3 bottom-0 mx-auto max-h-[80dvh] w-auto max-w-[680px] overflow-auto rounded-t-2xl bg-popover text-popover-foreground",
           open && dragY == null ? "animate-in slide-in-from-bottom" : "",
           !open && dragY == null ? "animate-out slide-out-to-bottom" : "",
         )}

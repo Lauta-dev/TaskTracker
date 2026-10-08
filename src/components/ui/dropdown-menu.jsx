@@ -73,7 +73,7 @@ export function DropdownMenu({ label, triggerLabel, children }) {
             role="menu"
             aria-label={label}
             style={{ top: pos.top, right: pos.right }}
-            class="fixed z-[60] w-52 rounded-xl border border-border bg-card p-1 shadow-lg animate-in fade-in-0 zoom-in-95 duration-150"
+            class="fixed z-[60] w-52 rounded-xl border border-border bg-card p-1 animate-in fade-in-0 zoom-in-95 duration-150"
           >
             {children}
           </div>

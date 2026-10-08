@@ -1,5 +1,7 @@
 import { useState } from "preact/hooks";
 import { fmtTotal } from "../format.js";
+import { AREAS, AREA_LABEL } from "../api.js";
+import { AreaIcon } from "./AreaIcon";
 
 const COLORS = [
   "oklch(0.63 0.17 150)", // verde (acento de la app)
@@ -32,17 +34,14 @@ function piePath(a0, a1) {
  * Torta SVG pura: duraciones totales por mes.
  * data: [{ label, total }] — total en segundos.
  * Checkbox por mes para activar/desactivar; clic en slice o fila para detalle.
+ * area/onAreaChange: segmented por área integrado arriba (como el del form).
  */
-export function Pie({ data = [] }) {
+export function Pie({ data = [], area = null, onAreaChange }) {
   const [sel, setSel] = useState(null);
   const [off, setOff] = useState([]);
   const items = (data || [])
     .filter((d) => d && typeof d.total === "number" && d.total > 0)
     .map((d, i) => ({ ...d, color: d.color || COLORS[i % COLORS.length] }));
-
-  if (items.length === 0) {
-    return <p class="rounded-md border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">Sin datos por mes.</p>;
-  }
 
   const isOn = (label) => !off.includes(label);
   const active = items.filter((d) => isOn(d.label));
@@ -68,6 +67,26 @@ export function Pie({ data = [] }) {
 
   return (
     <div class="rounded-md border border-border bg-card px-4 py-4">
+      {onAreaChange && (
+        <div class="mb-4 grid grid-cols-3 gap-1 rounded-md bg-muted p-1" role="group" aria-label="Filtrar por área">
+          {AREAS.map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => onAreaChange(area === a ? null : a)}
+              aria-pressed={area === a}
+              class={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-sm px-1 text-[13px] font-semibold transition-colors ${area === a ? "bg-card text-foreground" : "text-muted-foreground"}`}
+            >
+              <AreaIcon area={a} class="size-4 shrink-0" />
+              <span class="truncate">{AREA_LABEL[a]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {items.length === 0 ? (
+        <p class="py-6 text-center text-sm text-muted-foreground">Sin datos por mes.</p>
+      ) : (
+      <>
       <div class="flex flex-col sm:flex-row sm:items-center sm:gap-4">
       <div class="mx-auto w-full max-w-[260px] sm:mx-0 sm:w-[220px] sm:shrink-0">
         {active.length === 0 ? (
@@ -183,6 +202,8 @@ export function Pie({ data = [] }) {
             {current ? `${Math.round(current.pct)}% del total` : `${active.length} ${active.length === 1 ? "mes" : "meses"}`}
           </p>
         </div>
+      )}
+      </>
       )}
     </div>
   );

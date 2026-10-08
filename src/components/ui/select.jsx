@@ -62,7 +62,7 @@ export function SelectTrigger({ class: cls, className, children, ...props }) {
       data-state={open ? "open" : "closed"}
       onClick={() => setOpen(!open)}
       class={cn(
-        "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-all duration-200 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none transition-all duration-200 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
         cls,
       )}
@@ -76,7 +76,9 @@ export function SelectTrigger({ class: cls, className, children, ...props }) {
 
 export function SelectValue({ placeholder, children }) {
   const { value, selectedLabel } = useSelect();
-  const shown = children ?? selectedLabel ?? value;
+  /* selectedLabel solo existe si el usuario clickeó un item; con valor
+     programático (default o autollenado) se muestra el value. */
+  const shown = children ?? (selectedLabel || value);
   return (
     <span data-slot="select-value" class={cn("truncate", !shown && "text-muted-foreground")}>
       {shown || placeholder}
@@ -102,7 +104,7 @@ export function SelectContent({ className, children }) {
         if (e.target === e.currentTarget && !open) setPresent(false);
       }}
       class={cn(
-        "absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
+        "absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground",
         open ? "animate-in fade-in-0 zoom-in-95" : "animate-out fade-out-0 zoom-out-95",
         className,
       )}

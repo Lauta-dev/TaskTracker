@@ -48,7 +48,7 @@ async function mockData() {
 // Cuando el sync los confirma en la DB, salen de esta lista.
 const SHEETS_KEY = "tt-sheets";
 // Entradas cuyo POST falló; se reintentan después.
-// v2: payloads REST (la v1 con forma GAS quedó obsoleta en la migración).
+// v2: payloads REST.
 const PENDING_KEY = "tt-pending-v2";
 // Última hoja usada.
 const LAST_KEY = "tt-sheet";
