@@ -17,7 +17,6 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Stats } from "../components/Stats";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Bars } from "../components/Bars";
 import { Pie } from "../components/Pie";
@@ -236,16 +235,16 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
   });
   const hasDay = (p) => cells[p] != null;
   const monthTotal = [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
-  // Reparto del mes por área para el donut del aside.
+  const today = dayKey(new Date());
+  // Reparto de hoy por área para la tarjeta del aside.
   const areaMonth = { ingles: 0, ejercicio: 0, matematica: 0 };
   for (const r of apiRows || []) {
-    if (!r.key?.startsWith(prefix)) continue;
+    if (r.key !== today) continue;
     const a = r.area || "ingles";
     areaMonth[a] = (areaMonth[a] || 0) + r.secs;
   }
   const areaMonthTotal = areaMonth.ingles + areaMonth.ejercicio + areaMonth.matematica;
-  const today = dayKey(new Date());
-  // Intensidad del bloque total: promedio por día activo vs mejor día.
+  // Bloque final: total del mes, con intensidad vs el mejor día.
   const monthLv = level(monthTotal > 0 && dayInfo.size > 0 ? monthTotal / (maxSecs * dayInfo.size) : 0);
   const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-background" : "text-foreground";
 
@@ -438,19 +437,21 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
       </div>
       <aside class="mt-3 md:mt-0 md:w-[260px] md:shrink-0">
         {apiRows === null ? (
-          <div class="grid grid-cols-3 gap-1 rounded-md border border-border bg-card p-2 md:grid-cols-1" aria-hidden="true">
-            {[0, 1, 2].map((i) => (
-              <div key={"f" + i} class="h-[52px] animate-pulse rounded-md bg-muted md:h-[64px]" />
-            ))}
+          <div class="rounded-md border border-border bg-card p-4" aria-hidden="true">
+            <div class="h-3 w-20 animate-pulse rounded-sm bg-muted" />
+            <div class="mt-3 h-2.5 animate-pulse rounded-full bg-muted" />
+            <div class="mt-3 space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={"f" + i} class="h-5 animate-pulse rounded-sm bg-muted" />
+              ))}
+            </div>
           </div>
         ) : (
-          <>
-            <Stats dayInfo={dayInfo} monthTotal={monthTotal} y={y} m={m} />
-            <div class="mt-3 overflow-hidden rounded-md border border-border bg-card p-4">
+            <div class="overflow-hidden rounded-md border border-border bg-card p-4">
               <p class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[12px]">Por área</p>
               {areaMonthTotal > 0 ? (
                 <>
-                  <div class="mt-3 flex h-2.5 gap-[3px]" role="img" aria-label={`Reparto del mes: ${AREAS.map((a) => `${AREA_LABEL[a]} ${fmtTotal(areaMonth[a] || 0)}`).join(", ")}`}>
+                  <div class="mt-3 flex h-2.5 gap-[3px]" role="img"                     aria-label={`Reparto de hoy: ${AREAS.map((a) => `${AREA_LABEL[a]} ${fmtTotal(areaMonth[a] || 0)}`).join(", ")}`}>
                     {(() => {
                       const vis = AREAS.filter((a) => (areaMonth[a] || 0) > 0);
                       return vis.map((a, i) => (
@@ -484,10 +485,9 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
                   </div>
                 </>
               ) : (
-                <p class="mt-2 text-sm text-muted-foreground">Sin datos este mes.</p>
+                <p class="mt-2 text-sm text-muted-foreground">Sin datos hoy.</p>
               )}
             </div>
-          </>
         )}
       </aside>
       </div>
