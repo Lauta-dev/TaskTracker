@@ -42,16 +42,16 @@ export function Stats({ dayInfo, monthTotal, y, m }) {
   ];
 
   return (
-    <div class="col-span-7 grid grid-cols-3 divide-x divide-border overflow-hidden rounded-b-md border-x border-b border-border bg-card">
+    <div class="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-md border border-border bg-card md:grid-cols-1 md:divide-x-0 md:divide-y">
       {items.slice(0, 2).map((it) => (
-        <div key={it.label} class="px-2 py-2">
-          <p class="font-data text-[9px] uppercase tracking-widest text-muted-foreground">{it.label}</p>
-          <p class="font-data mt-0.5 truncate text-[13px] font-bold">{it.value}</p>
+        <div key={it.label} class="px-2 py-2 md:px-4 md:py-3">
+          <p class="font-data text-[9px] uppercase tracking-widest text-muted-foreground md:text-[11px]">{it.label}</p>
+          <p class="font-data mt-0.5 truncate text-[13px] font-bold md:mt-1 md:text-[17px]">{it.value}</p>
         </div>
       ))}
-      <div class="px-2 py-2">
-        <p class="font-data text-[9px] uppercase tracking-widest text-muted-foreground">Objetivo · 2h/d</p>
-        <p class="font-data mt-0.5 truncate text-[13px] font-bold">
+      <div class="px-2 py-2 md:px-4 md:py-3">
+        <p class="font-data text-[9px] uppercase tracking-widest text-muted-foreground md:text-[11px]">Objetivo · 2h/d</p>
+        <p class="font-data mt-0.5 truncate text-[13px] font-bold md:mt-1 md:text-[17px]">
           {monthTotal >= goal ? "¡Listo!" : `${fmtTotal(monthTotal)}/${fmtTotal(goal)}`}
         </p>
         <div class="mt-1 h-1 overflow-hidden rounded-full bg-muted">

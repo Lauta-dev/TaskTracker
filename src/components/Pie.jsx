@@ -154,7 +154,7 @@ export function Pie({ data = [] }) {
               onClick={() => on && toggle(d.label)}
               aria-pressed={sel === d.label}
               disabled={!on}
-              class={`flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 text-left text-[13px] transition-colors ${
+              class={`flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 text-left text-[13px] transition-colors md:py-2 md:text-[15px] ${
                 on ? "" : "opacity-45"
               } ${on ? "cursor-pointer" : "cursor-default"}`}
             >
@@ -175,7 +175,7 @@ export function Pie({ data = [] }) {
               {current && <span class="inline-block size-2.5 shrink-0 rounded-sm" style={{ background: current.color }} />}
               <span class="truncate">{current ? current.label : "Total"}</span>
             </p>
-            <p class="font-data text-[20px] font-bold leading-tight">
+            <p class="font-data text-[20px] font-bold leading-tight md:text-[26px]">
               {fmtTotal(current ? current.total : grand)}
             </p>
           </div>

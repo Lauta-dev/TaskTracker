@@ -142,7 +142,7 @@ export function SheetPicker({ names, sheet, onPick, onListChanged }) {
   return (
     <div class="w-full">
       <Select value={sheet} onValueChange={pick}>
-        <SelectTrigger className="font-display h-auto w-full gap-2 rounded-md border-0 bg-muted px-4 py-2 text-[17px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
+        <SelectTrigger className="font-display h-auto w-full gap-2 rounded-md border-0 bg-muted px-4 py-2 text-[17px] font-semibold shadow-none focus-visible:ring-2 md:py-2.5 md:text-[19px] [&_[data-slot=select-value]]:min-w-0">
           <SelectValue>{sheet || "Elegí hoja"}</SelectValue>
         </SelectTrigger>
         <SelectContent>

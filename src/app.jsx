@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { ChartColumn, ChartPie, LayoutGrid, LogOut, Plus, Table } from "lucide-preact";
+import { ChartColumn, ChartPie, LayoutGrid, LogOut, Plus, Table, Tags } from "lucide-preact";
 import { useSheets } from "./hooks/useSheets";
 import { authStatus, logout, saveLastSheet, USE_MOCK } from "./api.js";
 import { LockScreen } from "./components/LockScreen";
 import { Graph } from "./pages/Graph";
-import { Registro } from "./pages/Registro";
+import { Activities } from "./pages/Activities";
+import { EntryForm } from "./pages/EntryForm";
 import { Modal } from "./components/ui/modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { SheetPicker } from "./components/SheetPicker";
@@ -16,13 +17,14 @@ const VISTAS = [
   { value: "barras", label: "Barras", Icon: ChartColumn },
   { value: "pastel", label: "Pastel", Icon: ChartPie },
   { value: "tabla", label: "Tabla", Icon: Table },
+  { value: "actividades", label: "Actividades", Icon: Tags },
 ];
 
 export function App() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const sheets = useSheets();
-  // Prueba: FAB que abre el Registro en modal.
+  // FAB que abre el EntryForm en modal.
   const [regOpen, setRegOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [vista, setVista] = useState("grilla");
@@ -100,20 +102,20 @@ export function App() {
 
   return (
     <div class="min-h-screen bg-background text-foreground">
-      <div class="mx-auto w-full max-w-[680px] px-4 pb-10 pt-8">
-        <header class="mb-4 flex items-center gap-2">
-          <div class="flex min-w-0 shrink-0 items-center gap-2">
+      <div class="mx-auto w-full max-w-[680px] px-4 pb-10 pt-8 md:max-w-[1020px]">
+        <header class="mb-5 flex flex-wrap items-center gap-2 md:flex-nowrap md:gap-4">
+          <div class="order-1 flex min-w-0 shrink-0 items-center gap-2">
             <img src="/icons.svg" alt="Tinta" class="size-7 rounded-md" />
-            <p class="font-display truncate text-[17px] font-semibold tracking-tight">Tinta</p>
+            <p class="font-display truncate text-[17px] font-semibold tracking-tight md:text-[21px]">Tinta</p>
             {USE_MOCK && (
               <span class="font-data rounded-full bg-chart-2/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-foreground">
                 mock
               </span>
             )}
           </div>
-          <div class="ml-auto flex shrink-0 items-center gap-2">
+          <div class="order-2 ml-auto flex shrink-0 items-center gap-2 md:order-3 md:ml-0">
             <Select value={vista} onValueChange={setVista}>
-              <SelectTrigger aria-label="Vista" className="font-display h-10 w-auto shrink-0 gap-2 rounded-full border-0 bg-muted px-4 text-[15px] font-semibold shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
+              <SelectTrigger aria-label="Vista" className="font-display h-10 w-auto shrink-0 gap-2 rounded-full border-0 bg-muted px-4 text-[15px] font-semibold shadow-none focus-visible:ring-2 md:h-11 md:px-5 md:text-[16px] [&_[data-slot=select-value]]:min-w-0">
                 <SelectValue>
                   <span class="flex items-center gap-2">
                     <current.Icon class="size-4 text-muted-foreground" />
@@ -151,14 +153,20 @@ export function App() {
               </button>
             )}
           </div>
+          <div class="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1 md:px-2">
+            <div class="w-full md:mx-auto md:max-w-[380px]">
+              <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
+            </div>
+          </div>
         </header>
-        <div class="mb-5">
-          <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
-        </div>
-        <Graph names={sheets.names} vista={vista} onEdit={openEdit} />
+        {vista === "actividades" ? (
+          <Activities sheet={sheet} />
+        ) : (
+          <Graph names={sheets.names} vista={vista} onEdit={openEdit} />
+        )}
       </div>
       <Modal open={regOpen} onClose={closeReg} label={editing ? "Editar" : "Registrar"}>
-        {regOpen && <Registro key={editing?.row || "new"} sheet={sheet} editing={editing} onSaved={closeReg} />}
+        {regOpen && <EntryForm key={editing?.row || "new"} sheet={sheet} editing={editing} onSaved={closeReg} />}
       </Modal>
     </div>
   );

@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS entries (
   "content" TEXT NOT NULL,
   "duration" TEXT NOT NULL,
   "note" TEXT NOT NULL,
-  "url" TEXT NOT NULL
+  "url" TEXT NOT NULL,
+  "area" TEXT NOT NULL DEFAULT 'ingles'
 );
 CREATE INDEX IF NOT EXISTS idx_entries_sheet ON entries(sheet_id);
 

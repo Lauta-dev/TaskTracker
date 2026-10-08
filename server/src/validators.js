@@ -1,4 +1,5 @@
 import {
+  AREAS,
   BODY,
   ENTRY,
   ENTRY_REQUIRED,
@@ -85,6 +86,9 @@ export function validateEntryCreate(body) {
   for (const field of ENTRY_REQUIRED) {
     entry[field] = asString(body?.[field], field, { allowEmpty: OPTIONAL_EMPTY.has(field) });
   }
+  if (!AREAS.includes(entry[ENTRY.AREA])) {
+    throw new HttpError(STATUS.BAD_REQUEST, `Field 'area' must be one of: ${AREAS.join(", ")}`);
+  }
   const sheetId = body?.[BODY.SHEET_ID] ?? null;
   const sheetName = body?.[BODY.SHEET] ?? null;
   if (sheetId == null && sheetName == null) {
@@ -110,11 +114,15 @@ export function validateEntryPatch(body) {
     patch[field] =
       field === "sheet_id" ? parseId(value) : asString(value, field, { allowEmpty: true });
   }
+  if (patch[ENTRY.AREA] !== undefined && !AREAS.includes(patch[ENTRY.AREA])) {
+    throw new HttpError(STATUS.BAD_REQUEST, `Field 'area' must be one of: ${AREAS.join(", ")}`);
+  }
   if (Object.keys(patch).length === 0) {
     throw new HttpError(STATUS.BAD_REQUEST, MSG.EMPTY_PATCH);
   }
   return patch;
 }
 
-/* Qué campos aceptan "" (nota/url pueden ir vacías). */
-const OPTIONAL_EMPTY = new Set([ENTRY.NOTE, ENTRY.URL]);
+/* Qué campos aceptan "" (nota/url pueden ir vacías; duración también:
+   ejercicio es sesión simple con duración opcional). */
+const OPTIONAL_EMPTY = new Set([ENTRY.NOTE, ENTRY.URL, ENTRY.DURATION]);

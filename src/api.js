@@ -27,11 +27,12 @@ const F = Object.freeze({
   DURATION: "duration",
   NOTE: "note",
   URL: "url",
+  AREA: "area",
 });
 
 const QP = Object.freeze({ SHEET: "sheet" });
 
-/* Resultado de postEntry: lo consume Registro ("queued" muestra aviso). */
+/* Resultado de postEntry: lo consume EntryForm ("queued" muestra aviso). */
 const SEND = Object.freeze({ SENT: "sent", QUEUED: "queued" });
 
 // Mock automático: en dev (vite dev) se usan los datos congelados;
@@ -128,8 +129,12 @@ async function req(path, { method = "GET", body } = {}, { timeout = 15000, retri
   throw last;
 }
 
-/* Columnas 1-based históricas (las usa Registro para armar changes). */
-export const COLS = { fecha: 1, habilidad: 2, recurso: 3, contenido: 4, hora: 5, nota: 6 };
+/* Columnas 1-based históricas (las usa EntryForm para armar changes). */
+export const COLS = { fecha: 1, habilidad: 2, recurso: 3, contenido: 4, hora: 5, nota: 6, area: 7 };
+
+/* Áreas (hojas mixtas). */
+export const AREAS = Object.freeze(["ingles", "ejercicio", "matematica"]);
+export const AREA_LABEL = Object.freeze({ ingles: "Inglés", ejercicio: "Ejercicio", matematica: "Matemática" });
 
 /* Columna -> campo del PATCH. Contenido puede traer {title, url}. */
 const FIELD_BY_COL = Object.freeze({
@@ -139,6 +144,7 @@ const FIELD_BY_COL = Object.freeze({
   [COLS.contenido]: F.CONTENT,
   [COLS.hora]: F.DURATION,
   [COLS.nota]: F.NOTE,
+  [COLS.area]: F.AREA,
 });
 
 /* Fila del backend -> fila normalizada de la grilla.
@@ -149,8 +155,10 @@ function normalizeEntry(e) {
   const key = dateKey(e.date);
   if (!key) return null;
   const titulo = e.content === null || e.content === undefined ? "" : String(e.content).trim();
+  const area = typeof e.area === "string" && AREAS.includes(e.area) ? e.area : "ingles";
   return {
     key,
+    area,
     secs: parseSheetDuration(e.duration),
     habilidad: e.type ? String(e.type) : "—",
     recurso: e.source ? String(e.source) : "—",
@@ -310,14 +318,19 @@ function shortMonth(name) {
 }
 
 /** Totales por mes para el pastel: 2 GET (sheets + rows) y se agrupa acá.
- * En mock se agrupa igual desde data.json (una hoja ≈ un mes). */
-export async function getMonthlyTotals() {
+ * En mock se agrupa igual desde data.json (una hoja ≈ un mes).
+ * Con area, suma solo sus filas. */
+export async function getMonthlyTotals(area = null) {
+  const only = AREAS.includes(area) ? area : null;
   const totals = new Map();
   if (USE_MOCK) {
     const m = await mockData();
     for (const name of m.sheets || []) {
       let t = 0;
-      for (const r of parseRows(m.rows?.[name] || [])) t += r.secs;
+      for (const r of parseRows(m.rows?.[name] || [])) {
+        if (only && (r.area || "ingles") !== only) continue;
+        t += r.secs;
+      }
       if (t > 0) totals.set(name, t);
     }
   } else {
@@ -327,6 +340,7 @@ export async function getMonthlyTotals() {
     for (const e of Array.isArray(rows) ? rows : []) {
       const r = normalizeEntry(e);
       if (!r || typeof e?.sheet_id !== "number") continue;
+      if (only && r.area !== only) continue;
       secsById.set(e.sheet_id, (secsById.get(e.sheet_id) || 0) + r.secs);
     }
     // El orden lo define la API (/sheets cronológico): acá no se sortea.
@@ -377,7 +391,7 @@ export async function getRows(sheet) {
 
 /* ---------- escribir: POST, si falla se encola ---------- */
 
-/* Registro manda {fecha}; se guarda día calendario YYYY-MM-DD, sin hora
+/* EntryForm manda {fecha}; se guarda día calendario YYYY-MM-DD, sin hora
    (la hora UTC movía el día según el timezone). El slice conserva los
    payloads en cola con formato ISO legacy. */
 function toPayload(entry) {
@@ -390,6 +404,7 @@ function toPayload(entry) {
     [F.DURATION]: entry.hora,
     [F.NOTE]: entry.nota || "",
     [F.URL]: entry.link || "",
+    [F.AREA]: AREAS.includes(entry.area) ? entry.area : "ingles",
   };
 }
 

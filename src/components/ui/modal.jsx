@@ -3,13 +3,21 @@ import { X } from "lucide-preact";
 import { Portal } from "./portal";
 import { cn } from "./cn";
 
-/** Modal centrado de prueba para el Registro, con animación in/out. */
+/** Modal centrado en mobile, panel lateral derecho en desktop. */
 export function Modal({ open, onClose, label, children }) {
-  const [present, setPresent] = useState(false);
+  const [present, setPresent] = useState(open);
 
   useEffect(() => {
     if (open) setPresent(true);
   }, [open ]);
+
+  // Fallback: si el animationend no dispara (clase faltante, pestaña
+  // oculta, reduced-motion), desmonta igual tras la animación.
+  useEffect(() => {
+    if (open || !present) return;
+    const t = setTimeout(() => setPresent(false), 200);
+    return () => clearTimeout(t);
+  }, [open, present]);
 
   useEffect(() => {
     if (!open || !present) return;
@@ -25,11 +33,11 @@ export function Modal({ open, onClose, label, children }) {
   if (!present) return null;
   return (
     <Portal>
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 md:items-stretch md:justify-end md:p-0">
         <div
           class={cn(
-            "absolute inset-0 bg-black/60",
-            open ? "animate-in fade-in duration-200" : "animate-out fade-out duration-150",
+            "absolute inset-0 bg-black/60 motion-reduce:animate-none",
+            open ? "animate-in fade-in duration-150" : "animate-out fade-out duration-100",
           )}
           onClick={() => onClose?.()}
           aria-hidden="true"
@@ -41,10 +49,10 @@ export function Modal({ open, onClose, label, children }) {
             if (e.target === e.currentTarget && !open) setPresent(false);
           }}
           class={cn(
-            "relative max-h-[85dvh] w-full max-w-[480px] overflow-hidden rounded-2xl border border-border bg-card",
+            "relative flex max-h-[85dvh] w-full max-w-[480px] flex-col overflow-hidden rounded-2xl border border-border bg-card motion-reduce:animate-none md:ml-auto md:h-full md:max-h-none md:min-h-dvh md:w-[440px] md:max-w-[440px] md:rounded-none md:rounded-l-2xl md:border-y-0 md:border-r-0",
             open
-              ? "animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200"
-              : "animate-out fade-out-0 zoom-out-95 slide-out-to-bottom-2 duration-150",
+              ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-150 md:slide-in-from-bottom-0 md:slide-in-from-right"
+              : "animate-out fade-out-0 slide-out-to-bottom-2 duration-100 md:slide-out-to-bottom-0 md:slide-out-to-right",
           )}
         >
           <button
@@ -55,7 +63,7 @@ export function Modal({ open, onClose, label, children }) {
           >
             <X class="size-5" />
           </button>
-          <div class="max-h-[85dvh] overflow-y-auto p-4">
+          <div class="max-h-[85dvh] overflow-y-auto p-4 md:max-h-none md:flex-1 md:p-6">
             {children}
           </div>
         </div>

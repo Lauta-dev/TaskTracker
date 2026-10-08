@@ -19,7 +19,7 @@ export function Bars({ series = [] }) {
       {n > 1 && (
         <div class="mb-2 flex gap-4">
           {series.map((s) => (
-            <span key={s.label} class="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <span key={s.label} class="flex items-center gap-1.5 text-[13px] text-muted-foreground md:text-[14px]">
               <span
                 class="size-2.5 rounded-sm"
                 style={{ background: s.color }}
@@ -48,7 +48,7 @@ export function Bars({ series = [] }) {
           const day = i + 1;
           return (
             <div key={day} class="grid items-center gap-2 py-[3px]" style={{ gridTemplateColumns: "26px 1fr" }}>
-              <span class="font-data text-right text-[13px] text-muted-foreground">{day}</span>
+              <span class="font-data text-right text-[13px] text-muted-foreground md:text-[14px]">{day}</span>
               <div class="flex min-w-0 flex-col justify-center gap-[4px]">
                 {series.map((s) => {
                   const total = s.days[i]?.total || 0;

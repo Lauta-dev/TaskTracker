@@ -21,6 +21,7 @@ export const ENTRY = Object.freeze({
   DURATION: "duration",
   NOTE: "note",
   URL: "url",
+  AREA: "area",
 });
 
 /* Campos obligatorios al crear (miran el NOT NULL del schema). */
@@ -32,7 +33,11 @@ export const ENTRY_REQUIRED = Object.freeze([
   ENTRY.DURATION,
   ENTRY.NOTE,
   ENTRY.URL,
+  ENTRY.AREA,
 ]);
+
+/* Áreas válidas (hojas mixtas: cada entrada lleva su área). */
+export const AREAS = Object.freeze(["ingles", "ejercicio", "matematica"]);
 
 /* Campos que acepta el PATCH (todo menos el id). */
 export const ENTRY_UPDATABLE = Object.freeze([...ENTRY_REQUIRED, ENTRY.SHEET_ID]);

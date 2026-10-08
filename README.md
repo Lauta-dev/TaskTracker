@@ -36,6 +36,14 @@ VITE_GAS_ID=<id del deployment>
 # prod: exportar GAS_ID=<id> antes del build (o en la plataforma)
 ```
 
+## Áreas
+
+Hojas mixtas: cada registro lleva `área` (`ingles` | `ejercicio` | `matematica`).
+Todos comparten los mismos gráficos; el drawer del día muestra una barra
+repartida en 3 colores (uno por área) y la lista agrupada por área.
+El formulario adapta tipos/fuentes por área y en ejercicio la duración es
+opcional (sesión simple).
+
 ## Auth
 
 Sesión en cookie `HttpOnly` (`tt_session`): el JS nunca ve el token.
@@ -45,6 +53,7 @@ Sesión en cookie `HttpOnly` (`tt_session`): el JS nunca ve el token.
 - La cuenta se crea una sola vez: `POST /auth/setup` solo anda con la tabla
   `users` vacía (después responde 403, no hay registro público).
 - Aplicar esquema: `wrangler d1 execute DB --file=./schema.sql [--remote]`.
+- DBs existentes (sin columna `area`): `wrangler d1 execute DB --file=./migrate-area.sql [--remote]` (backfill a `ingles`).
 - Orígenes extra del front (CORS/CSRF): `ALLOWED_ORIGINS` en `wrangler.toml`.
 
 ## Estructura

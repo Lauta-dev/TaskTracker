@@ -29,7 +29,7 @@ export function useRows(sheet) {
   }, [sheet, tick]);
 
   useEffect(() => {
-    // Un guardado avisa y se refetchea (ej. modal de Registro).
+    // Un guardado avisa y se refetchea (ej. modal de EntryForm).
     const onSaved = () => setTick((t) => t + 1);
     window.addEventListener("tt:rows", onSaved);
     return () => window.removeEventListener("tt:rows", onSaved);

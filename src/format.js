@@ -24,6 +24,12 @@ export function secsToHMS(secs) {
   return h + ":" + m + ":" + r;
 }
 
+// Sesiones (ejercicio) -> "1 ses" | "N ses".
+export function fmtSessions(n) {
+  const v = Math.max(0, Math.round(Number(n) || 0));
+  return v === 1 ? "1 ses" : v + " ses";
+}
+
 // Agrega https:// si falta esquema, "" si vacío.
 export function normalizeUrl(u) {
   if (u === null || u === undefined) return "";

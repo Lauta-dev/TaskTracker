@@ -1,36 +1,43 @@
 import { useState } from "preact/hooks";
 import { Link, useLocation, useSearch } from "wouter";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "../components/ui/select";
 import { DatePicker } from "../components/ui/date-picker";
-import { COLS, postEntry, updateCells } from "../api.js";
+import { AreaIcon } from "../components/AreaIcon";
+import { COLS, AREAS, AREA_LABEL, postEntry, updateCells } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { parseDuration } from "../parse.js";
 import { dayKey } from "../dates.js";
 import { fmtTotal, normalizeUrl, secsToHMS } from "../format.js";
 import { sheetFromSearch } from "../sheet.js";
+import { PRESETS, field, label } from "./entry-form/presets.js";
+import { EnglishForm } from "./entry-form/EnglishForm.jsx";
+import { MathForm } from "./entry-form/MathForm.jsx";
+import { WorkoutForm } from "./entry-form/WorkoutForm.jsx";
+import { ContentField } from "./entry-form/ContentField.jsx";
 
-const field =
-  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring";
-const label =
-  "font-data mb-1.5 block text-[11px] uppercase tracking-widest text-muted-foreground";
+const AREA_FORMS = {
+  ingles: EnglishForm,
+  matematica: MathForm,
+  ejercicio: WorkoutForm,
+};
 
-const DEFAULT_HABS = ["Listening", "Vocabulary", "Reading", "Grammar"];
-const DEFAULT_RECS = ["Anki", "YT", "Serie", "Anime", "Movie"];
-
-export function Registro({ onSaved, sheet: sheetProp, editing }) {
+/* Shell del formulario: área, día, form específico, contenido+url, nota y submit.
+   Cada área vive en su archivo (entry-form/*) para no ensuciar este. */
+export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
   const [, navigate] = useLocation();
   const search = useSearch();
   const sheet = sheetProp || sheetFromSearch(search);
   const { rows } = useRows(sheet);
 
-  const habs = [...new Set([...DEFAULT_HABS, ...(rows || []).map((r) => r.habilidad)])];
-  const recs = [...new Set([...DEFAULT_RECS, ...(rows || []).map((r) => r.recurso)])];
+  const [area, setArea] = useState(
+    editing?.area && AREAS.includes(editing.area) ? editing.area : "ingles",
+  );
+  const preset = PRESETS[area] || PRESETS.ingles;
+  const areaRows = (rows || []).filter((r) => (r.area || "ingles") === area);
+  const AreaForm = AREA_FORMS[area] || EnglishForm;
 
   const [dia, setDia] = useState(editing?.key || dayKey(new Date()));
-  const [habilidad, setHabilidad] = useState(editing?.habilidad || habs[0]);
-  const [recurso, setRecurso] = useState(editing?.recurso || recs[0]);
+  const [habilidad, setHabilidad] = useState(editing?.habilidad || preset.habs[0]);
+  const [recurso, setRecurso] = useState(editing?.recurso || preset.recs[0] || "—");
   const [duracion, setDuracion] = useState(editing ? fmtTotal(editing.secs || 0) : "");
   const [contenido, setContenido] = useState(editing?.titulo || "");
   const [url, setUrl] = useState(editing?.url || "");
@@ -40,9 +47,12 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
   const [sending, setSending] = useState(false);
 
   const parsed = parseDuration(duracion);
+  const durOk = preset.durRequired
+    ? !parsed.error && parsed.secs > 0
+    : duracion.trim() === "" || (!parsed.error && parsed.secs > 0);
   const canSave =
     /^\d{4}-\d{2}-\d{2}$/.test(dia) &&
-    !parsed.error && parsed.secs > 0 &&
+    durOk &&
     contenido.trim() !== "";
 
   function onSubmit(e) {
@@ -51,20 +61,25 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
     setSubmitError("");
     setQueuedMsg("");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return setSubmitError("Elegí un día válido.");
-    if (parsed.error || !parsed.secs) return setSubmitError(parsed.error || "Duración inválida.");
+    if (!durOk) return setSubmitError(parsed.error || "Duración inválida.");
     if (!contenido.trim()) return setSubmitError("Poné qué hiciste en Contenido.");
     const finalUrl = normalizeUrl(url);
+    const finalHora = parsed.secs > 0 ? secsToHMS(parsed.secs) : "";
+    const finalRecurso = preset.hideRec ? "—" : recurso;
     setSending(true);
     // Edición: UPDATE solo las columnas que cambiaron.
     if (editing?.row) {
       const changes = [];
       if (dia !== editing.key) changes.push({ col: COLS.fecha, newValue: dia });
+      if (area !== (editing.area || "ingles")) changes.push({ col: COLS.area, newValue: area });
       if (habilidad !== editing.habilidad) changes.push({ col: COLS.habilidad, newValue: habilidad });
-      if (recurso !== editing.recurso) changes.push({ col: COLS.recurso, newValue: recurso });
+      if (!preset.hideRec && finalRecurso !== editing.recurso) changes.push({ col: COLS.recurso, newValue: finalRecurso });
       if (contenido.trim() !== editing.titulo || finalUrl !== editing.url) {
         changes.push({ col: COLS.contenido, newValue: { title: contenido.trim(), url: finalUrl } });
       }
-      if (parsed.secs !== editing.secs) changes.push({ col: COLS.hora, newValue: secsToHMS(parsed.secs) });
+      if (finalHora !== secsToHMS(editing.secs || 0) && !(finalHora === "" && !editing.secs)) {
+        changes.push({ col: COLS.hora, newValue: finalHora });
+      }
       if (nota.trim() !== (editing.notas || "")) changes.push({ col: COLS.nota, newValue: nota.trim() });
       updateCells(sheet, editing.row, changes).then(() => {
         window.dispatchEvent(new Event("tt:rows"));
@@ -78,11 +93,12 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
     }
     postEntry({
       fecha: dia,
+      area,
       habilidad,
-      recurso,
+      recurso: finalRecurso,
       contenido: contenido.trim(),
       link: finalUrl,
-      hora: secsToHMS(parsed.secs),
+      hora: finalHora,
       nota: nota.trim(),
       sheet,
     }).then((res) => {
@@ -111,11 +127,32 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
   return (
     <div>
       <div class="mb-4">
-        <h1 class="font-display text-[24px] font-semibold leading-tight">{editing ? "Editar" : "Registrar"}</h1>
-        <p class="mt-0.5 text-[14px] text-muted-foreground">{sheet}</p>
+        <h1 class="font-display text-[24px] font-semibold leading-tight md:text-[30px]">{editing ? "Editar" : "Registrar"}</h1>
+        <p class="mt-0.5 text-[14px] text-muted-foreground md:text-[16px]">{sheet}</p>
       </div>
 
       <form onSubmit={onSubmit} class="rounded-xl border border-border bg-card p-4">
+        <div class="mb-4" role="group" aria-label="Área">
+          <div class="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
+            {AREAS.map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => {
+                  setArea(a);
+                  const p = PRESETS[a];
+                  setHabilidad(p.habs[0]);
+                  setRecurso(p.recs?.[0] || "—");
+                }}
+                aria-pressed={area === a}
+                class={`flex h-9 items-center justify-center gap-1.5 rounded-sm text-[13px] font-semibold transition-colors ${area === a ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+              >
+                <AreaIcon area={a} class="size-4" />
+                {AREA_LABEL[a]}
+              </button>
+            ))}
+          </div>
+        </div>
         <div class="mb-4">
           <span class={label} id="f-dia-label">Día</span>
           <DatePicker
@@ -126,59 +163,24 @@ export function Registro({ onSaved, sheet: sheetProp, editing }) {
           />
         </div>
 
-        <div class="mb-4 grid grid-cols-2 gap-3">
-          <div>
-            <label class={label} for="f-rec">Tipo</label>
-            <Select value={recurso} onValueChange={setRecurso}>
-              <SelectTrigger id="f-rec"><SelectValue placeholder="Elegí…" /></SelectTrigger>
-              <SelectContent>
-                {recs.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label class={label} for="f-hab">Habilidad</label>
-            <Select value={habilidad} onValueChange={setHabilidad}>
-              <SelectTrigger id="f-hab"><SelectValue placeholder="Elegí…" /></SelectTrigger>
-              <SelectContent>
-                {habs.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <AreaForm
+          preset={preset}
+          habilidad={habilidad}
+          setHabilidad={setHabilidad}
+          recurso={recurso}
+          setRecurso={setRecurso}
+          duracion={duracion}
+          setDuracion={setDuracion}
+          rows={areaRows}
+        />
 
-        <div class="mb-4">
-          <label class={label} for="f-dur">Duración</label>
-          <input
-            id="f-dur" type="text" value={duracion} onInput={(e) => setDuracion(e.target.value)}
-            placeholder="25m · 1h 30m · 1:00:00 · =25/1440" class={`${field} font-data`}
-          />
-          <p class="font-data mt-1.5 text-[12px]" aria-live="polite">
-            {duracion.trim() === "" ? (
-              <span class="text-muted-foreground">Acepta fórmulas (=24*2/1440) o 2m, 1h 30m…</span>
-            ) : parsed.error ? (
-              <span class="text-destructive">{parsed.error}</span>
-            ) : (
-              <span class="text-chart-2">→ {fmtTotal(parsed.secs)}</span>
-            )}
-          </p>
-        </div>
-
-        <div class="mb-4">
-          <label class={label} for="f-cont">Contenido</label>
-          <input
-            id="f-cont" type="text" value={contenido} onInput={(e) => setContenido(e.target.value)}
-            placeholder="The Office S01 E05" class={field}
-          />
-        </div>
-
-        <div class="mb-4">
-          <label class={label} for="f-url">Url <span class="normal-case">(opcional, se fija al contenido)</span></label>
-          <input
-            id="f-url" type="text" inputmode="url" value={url} onInput={(e) => setUrl(e.target.value)}
-            placeholder="youtube.com/…" class={`${field} font-data`}
-          />
-        </div>
+        <ContentField
+          value={contenido}
+          onChange={setContenido}
+          url={url}
+          onUrlChange={setUrl}
+          placeholder={preset.contentPh}
+        />
 
         <div class="mb-5">
           <label class={label} for="f-nota">Nota</label>
