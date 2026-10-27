@@ -335,7 +335,7 @@ export function Graph({ onEdit, vista = "grilla" }) {
                   // Skeleton con la forma del mes actual del dispositivo.
                   if (d === null) {
                     if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" />;
-                    if (i !== skelLast + 1) return null;
+                    if (i !== skelLast + 1) return <div key={"x" + i} aria-hidden="true" />;
                     const span = skelCells.length - 1 - skelLast;
                     return (
                       <div
@@ -370,7 +370,7 @@ export function Graph({ onEdit, vista = "grilla" }) {
                 if (d == null) {
                   if (i <= lastIdx) return <div key={"x" + i} />;
                   // Relleno final: un solo bloque que ocupa todos los espacios.
-                  if (i !== lastIdx + 1) return null;
+                  if (i !== lastIdx + 1) return <div key={"x" + i} aria-hidden="true" />;
                   const span = cells.length - 1 - lastIdx;
                   return (
                     <div
