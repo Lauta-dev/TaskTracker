@@ -242,6 +242,13 @@ export function Graph({ onEdit, vista = "grilla" }) {
   const cells = monthCells(y, m).map((c) =>
     c === null ? null : { ...c, total: dayInfo.get(c.key)?.total || 0 },
   );
+  // Celdas vacías después del último día → total del mes.
+  let lastIdx = -1;
+  cells.forEach((c, i) => {
+    if (c === null) return;
+    lastIdx = i;
+  });
+  const hasDay = (p) => cells[p] != null;
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const weekTotals = weeks.map((row) => row.reduce((acc, c) => (c == null ? acc : acc + c.total), 0));
