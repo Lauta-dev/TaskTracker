@@ -39,11 +39,13 @@ export function normalizeUrl(u) {
   return "https://" + t;
 }
 
-// Ratio 0..1 -> nivel 0..4 para la rampa de color.
-export function level(ratio) {
-  if (ratio <= 0) return 0;
-  if (ratio <= 0.25) return 1;
-  if (ratio <= 0.5) return 2;
-  if (ratio <= 0.75) return 3;
+// Segundos -> nivel 0..4 con umbrales fijos en minutos
+// (leyenda: 0 · <20 min · 20-39 · 40-59 · 60+).
+export function level(secs) {
+  const min = Number(secs) / 60;
+  if (min <= 0) return 0;
+  if (min < 20) return 1;
+  if (min < 40) return 2;
+  if (min < 60) return 3;
   return 4;
 }

@@ -63,6 +63,15 @@ export function MONTH_LABEL(key) {
   return `${MESES[Number(m[2])]} ${m[1]}`;
 }
 
+// "YYYY-MM-DD" desplazado n días (negativo = atrás). "" si no matchea.
+export function addDays(key, n) {
+  const m = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  d.setDate(d.getDate() + n);
+  return dayKey(d);
+}
+
 // Grilla Lun->Dom del mes con nulls de relleno.
 export function monthCells(y, m) {
   const first = new Date(y, m - 1, 1);
