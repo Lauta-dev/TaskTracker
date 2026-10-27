@@ -4,13 +4,13 @@ Calendario de horas de inmersión (inglés, ejercicio, matemática): a más hora
 
 ## Vistas
 
-- **Grilla**: heatmap del mes (Lun–Dom) con el total del mes, objetivo 2h/día y detalle por día en drawer.
+- **Grilla**: heatmap del mes (Lun–Dom) con header propio (mes + año a la izquierda, botones ◀ ▶ a la derecha), columna "Semana" con el total de cada semana, total del mes y detalle por día en drawer.
 - **Pastel**: duraciones totales por mes (con filtro por área).
 - **Tabla**: todos los registros del mes.
 - **Actividades**: gestión de tipos/fuentes propios por área.
 - **Registro**: FAB (+) que abre el formulario en modal (día, tipo, habilidad, duración, contenido, url, nota). Sin conexión, queda en cola y se manda solo.
 
-El mes activo viaja en `?month=YYYY-MM` y se navega con ◀ ▶ (MonthNav): el mes existe en cuanto hay una entrada con esa fecha, no hay hojas que crear.
+El mes activo viaja en `?month=YYYY-MM`: el mes existe en cuanto hay una entrada con esa fecha, no hay hojas que crear. La navegación vive en el header del heatmap.
 
 ## Datos
 
@@ -84,9 +84,9 @@ src/
   month.js          # ?month= → mes resuelto
   format.js         # fmtTotal, secsToHMS, normalizeUrl, level
   storage.js        # localStorage seguro (JSON)
-  hooks/            # useMonths, useRows
+  hooks/            # useRows ({rows, live, error, retry})
   pages/            # Graph, Activities, EntryForm (form por área en entry-form/*)
-  components/       # MonthNav, Pie, LockScreen, ui/*
+  components/       # Pie, LockScreen, ui/*
 ```
 
 ## Mock

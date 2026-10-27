@@ -18,7 +18,8 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { Pie } from "../components/Pie";
-import { Pencil, Trash2 } from "lucide-preact";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-preact";
+import { Fragment } from "preact";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
 const LEVEL_BG = [
@@ -46,7 +47,7 @@ function exposedCorners(pos, hasDay) {
   ].filter(Boolean).join(" ");
 }
 
-export function Graph({ months, onEdit, vista = "grilla" }) {
+export function Graph({ onEdit, vista = "grilla" }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
   const [daySelKey, setDaySelKey] = useState(null);
@@ -191,6 +192,18 @@ export function Graph({ months, onEdit, vista = "grilla" }) {
     setShownArea(null);
   }
 
+  // Semanas (chunks de 7 celdas) con su total; skeleton usa la misma forma.
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const weekTotals = weeks.map((row) => row.reduce((acc, c) => (c == null ? acc : acc + c.total), 0));
+  const skelWeeks = [];
+  for (let i = 0; i < skelCells.length; i += 7) skelWeeks.push(skelCells.slice(i, i + 7));
+
+  function shiftMonth(d) {
+    const dt = new Date(y, m - 1 + d, 1);
+    navigate(`/?month=${monthKey(dt.getFullYear(), dt.getMonth() + 1)}`);
+  }
+
   const sel = daySelKey ? dayInfo.get(daySelKey) : null;
   const selDate = daySelKey ? new Date(y, m - 1, Number(daySelKey.slice(8, 10))) : null;
   const queued = month ? pendingCount(month) : 0;
@@ -198,9 +211,6 @@ export function Graph({ months, onEdit, vista = "grilla" }) {
   return (
     <div>
       <div class="mb-4">
-        {apiRows !== null && live && (months || []).length === 0 && (
-          <p class="text-sm text-muted-foreground">Sin meses con datos todavía. Registrá tu primera entrada.</p>
-        )}
         {apiRows !== null && !live && (
           <button
             type="button"
@@ -215,134 +225,180 @@ export function Graph({ months, onEdit, vista = "grilla" }) {
       {vista !== "tabla" && vista !== "pastel" && (
       <>
       <div key="grilla-wrap" class="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 md:flex md:items-start md:gap-6">
-      <div key="grilla" class="grid flex-1 grid-cols-7 gap-0 -mx-2 sm:-mx-4 md:mx-0">
-        {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
-          <div key={w} class="font-data pb-1 text-center text-[12px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[13px]">
-            {w}
-          </div>
-        ))}
-        {apiRows === null
-          ? skelCells.map((c, i) => {
-              if (c === null) {
-                if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" />;
-                if (i !== skelLast + 1) return null;
-                const span = skelCells.length - 1 - skelLast;
-                return (
-                  <div
-                    key="skel-total"
-                    aria-hidden="true"
-                    style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}
-                    class="min-h-full w-full animate-pulse rounded-br-md bg-muted"
-                  />
-                );
-              }
-              const skelBelow = i + 7;
-              const skelRight = i % 7 < 6 ? i + 1 : -1;
-              const skelBelowIsTotal = skelBelow > skelLast && skelBelow < skelCells.length;
-              const skelRightIsTotal = skelRight !== -1 && skelRight > skelLast && skelRight < skelCells.length;
-              const skelCc = exposedCorners(i, skelHas)
-                .split(" ")
-                .filter((c) => {
-                  if (skelBelowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
-                  if (skelRightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
-                  return true;
-                })
-                .join(" ");
-              return (
-                <div
-                  key={"s" + i}
-                  aria-hidden="true"
-                  style={{ animationDelay: `${(i % 7) * 60}ms` }}
-                  class={`aspect-square w-full animate-pulse bg-muted ${skelCc}`}
-                />
-              );
-            })
-          : cells.map((d, i) => {
-          if (d == null) {
-            if (i <= lastIdx) return <div key={"x" + i} />;
-            // Relleno final: un solo bloque que ocupa todos los espacios.
-            if (i !== lastIdx + 1) return null;
-            const span = cells.length - 1 - lastIdx;
-            return (
-              <div
-                key="month-total"
-                title={`Total del mes: ${fmtTotal(monthTotal)}`}
-                style={{ gridColumn: span > 1 ? `span ${span}` : undefined }}
-                class={`relative min-h-full w-full overflow-hidden border border-border rounded-br-md ${LEVEL_BG[monthLv]}`}
-              >
-                <span class="absolute inset-0 flex items-center justify-center p-1.5">
-                  <span class={`font-data text-[14px] font-bold leading-none md:text-[17px] ${monthTcls}`}>
-                    {fmtShort(monthTotal)}
-                  </span>
-                </span>
-              </div>
-            );
-          }
-          const lv = level(d.total / maxSecs);
-          // lv 0: apagado · lv 1-2: texto del tema · lv 3-4: lleno → texto del fondo
-          const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-background" : "text-foreground";
-          // Empalme con el bloque del total: si abajo o a la derecha hay
-          // relleno del total (no día, pero tampoco vacío exterior), la
-          // última semana queda como una sola pieza sin muescas.
-          const belowPos = i + 7;
-          const rightPos = i % 7 < 6 ? i + 1 : -1;
-          const belowIsTotal = belowPos > lastIdx && belowPos < cells.length;
-          const rightIsTotal = rightPos !== -1 && rightPos > lastIdx && rightPos < cells.length;
-          const cc = exposedCorners(i, hasDay)
-            .split(" ")
-            .filter((c) => {
-              if (belowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
-              if (rightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
-              return true;
-            })
-            .join(" ");
-          const ccTl = cc.includes("rounded-tl");
-          // Solo los días con datos abren el drawer (los vacíos no son botón).
-          const hasData = d.total > 0;
-          return (
+      <div key="grilla" class="min-w-0 flex-1">
+        <div class="mb-2 flex items-center justify-between">
+          <h1 class="font-display text-[20px] font-semibold capitalize leading-none tracking-tight md:text-[24px]">{MONTH_LABEL(prefix)}</h1>
+          <div class="flex shrink-0 items-center">
             <button
               type="button"
-              key={d.key}
-              disabled={!hasData}
-              onClick={() => openDay(d.key)}
-              title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-              class={`relative aspect-square w-full overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${cc} ${hasData ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" : "cursor-default"}`}
+              onClick={() => shiftMonth(-1)}
+              title="Mes anterior"
+              aria-label="Mes anterior"
+              class="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors active:bg-muted md:size-10"
             >
-              <span class="absolute inset-0 flex flex-col justify-between p-1.5 md:p-2">
-                {d.key === today ? (
-                  <span aria-hidden="true" class="invisible font-data text-[14px] font-bold leading-none md:text-[16px]">
-                    {d.day}
-                  </span>
-                ) : (
-                  <span class={`font-data text-[14px] font-bold leading-none md:text-[16px] ${tcls}`}>
-                    {d.day}
-                  </span>
-                )}
-                {d.total > 0 && (() => {
-                  const done = [...new Set((dayInfo.get(d.key)?.entries || []).map((e) => e.area || "ingles"))];
-                  return (
-                    <span class="flex justify-end">
-                      <span class="flex items-center gap-0.5 rounded-full bg-black/70 px-1 py-0.5 leading-none md:gap-1.5 md:px-2 md:py-1">
-                        {done.map((a) => (
-                          <span key={a} style={{ color: AREA_COLOR[a] }} class="leading-none">
-                            <AreaIcon area={a} class="block size-2.5 md:size-[18px]" />
-                          </span>
-                        ))}
-                      </span>
-                    </span>
-                  );
-                })()}
-              </span>
-              {d.key === today && (
-                <span class={`absolute left-0 top-0 border-b border-r border-chart-2 bg-chart-2 p-1.5 md:p-2 ${ccTl ? "rounded-tl-md rounded-br-xl" : "rounded-br-xl"}`}>
-                  <span class="block font-data text-[12px] font-bold leading-none text-background sm:text-[14px] md:text-[16px]">
-                    {d.day}
-                  </span>
-                </span>
-              )}
+              <ChevronLeft class="size-5" />
             </button>
-          );
-        })}
+            <button
+              type="button"
+              onClick={() => shiftMonth(1)}
+              title="Mes siguiente"
+              aria-label="Mes siguiente"
+              class="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors active:bg-muted md:size-10"
+            >
+              <ChevronRight class="size-5" />
+            </button>
+          </div>
+        </div>
+        <div class="grid gap-0 -mx-2 sm:-mx-4 md:mx-0" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+          <div class="font-data pb-1 text-left text-[10px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[11px]">Semana</div>
+          {["L", "M", "X", "J", "V", "S", "D"].map((w) => (
+            <div key={w} class="font-data pb-1 text-center text-[12px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[13px]">
+              {w}
+            </div>
+          ))}
+          {(apiRows === null ? skelWeeks : weeks).map((row, wi) => (
+            <Fragment key={"w" + wi}>
+              {/* Resumen de la semana: número + total. */}
+              {(() => {
+                const t = apiRows === null ? 0 : weekTotals[wi];
+                return (
+                  <div
+                    title={apiRows === null ? undefined : `Semana ${wi + 1}: ${fmtTotal(t)}`}
+                    class={`relative aspect-square w-full overflow-hidden border border-border bg-muted ${apiRows === null ? "animate-pulse" : ""}`}
+                  >
+                    <span class="absolute inset-0 flex flex-col justify-between p-1 md:p-1.5">
+                      <span class="font-data text-[9px] font-semibold uppercase tracking-widest text-muted-foreground md:text-[11px]">S{wi + 1}</span>
+                      <span class="font-data text-[12px] font-bold leading-none md:text-[14px]">{t > 0 ? fmtShort(t) : ""}</span>
+                    </span>
+                  </div>
+                );
+              })()}
+              {row.map((d, ci) => {
+                const i = wi * 7 + ci;
+                if (apiRows === null) {
+                  // Skeleton con la forma del mes actual del dispositivo.
+                  if (d === null) {
+                    if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" />;
+                    if (i !== skelLast + 1) return null;
+                    const span = skelCells.length - 1 - skelLast;
+                    return (
+                      <div
+                        key="skel-total"
+                        aria-hidden="true"
+                        style={{ gridColumn: span > 1 ? `${(i % 7) + 2} / span ${span}` : undefined }}
+                        class="min-h-full w-full animate-pulse rounded-br-md bg-muted"
+                      />
+                    );
+                  }
+                  const skelBelow = i + 7;
+                  const skelRight = i % 7 < 6 ? i + 1 : -1;
+                  const skelBelowIsTotal = skelBelow > skelLast && skelBelow < skelCells.length;
+                  const skelRightIsTotal = skelRight !== -1 && skelRight > skelLast && skelRight < skelCells.length;
+                  const skelCc = exposedCorners(i, skelHas)
+                    .split(" ")
+                    .filter((c) => {
+                      if (skelBelowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
+                      if (skelRightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
+                      return true;
+                    })
+                    .join(" ");
+                  return (
+                    <div
+                      key={"s" + i}
+                      aria-hidden="true"
+                      style={{ animationDelay: `${(i % 7) * 60}ms` }}
+                      class={`aspect-square w-full animate-pulse bg-muted ${skelCc}`}
+                    />
+                  );
+                }
+                if (d == null) {
+                  if (i <= lastIdx) return <div key={"x" + i} />;
+                  // Relleno final: un solo bloque que ocupa todos los espacios.
+                  if (i !== lastIdx + 1) return null;
+                  const span = cells.length - 1 - lastIdx;
+                  return (
+                    <div
+                      key="month-total"
+                      title={`Total del mes: ${fmtTotal(monthTotal)}`}
+                      style={{ gridColumn: span > 1 ? `${(i % 7) + 2} / span ${span}` : undefined }}
+                      class={`relative min-h-full w-full overflow-hidden border border-border rounded-br-md ${LEVEL_BG[monthLv]}`}
+                    >
+                      <span class="absolute inset-0 flex items-center justify-center p-1.5">
+                        <span class={`font-data text-[14px] font-bold leading-none md:text-[17px] ${monthTcls}`}>
+                          {fmtShort(monthTotal)}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                }
+                const lv = level(d.total / maxSecs);
+                // lv 0: apagado · lv 1-2: texto del tema · lv 3-4: lleno → texto del fondo
+                const tcls = lv === 0 ? "text-muted-foreground" : lv >= 3 ? "text-background" : "text-foreground";
+                // Empalme con el bloque del total: si abajo o a la derecha hay
+                // relleno del total (no día, pero tampoco vacío exterior), la
+                // última semana queda como una sola pieza sin muescas.
+                const belowPos = i + 7;
+                const rightPos = i % 7 < 6 ? i + 1 : -1;
+                const belowIsTotal = belowPos > lastIdx && belowPos < cells.length;
+                const rightIsTotal = rightPos !== -1 && rightPos > lastIdx && rightPos < cells.length;
+                const cc = exposedCorners(i, hasDay)
+                  .split(" ")
+                  .filter((c) => {
+                    if (belowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
+                    if (rightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
+                    return true;
+                  })
+                  .join(" ");
+                const ccTl = cc.includes("rounded-tl");
+                // Solo los días con datos abren el drawer (los vacíos no son botón).
+                const hasData = d.total > 0;
+                return (
+                  <button
+                    type="button"
+                    key={d.key}
+                    disabled={!hasData}
+                    onClick={() => openDay(d.key)}
+                    title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
+                    class={`relative aspect-square w-full overflow-hidden border border-border text-left ${LEVEL_BG[lv]} ${cc} ${hasData ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" : "cursor-default"}`}
+                  >
+                    <span class="absolute inset-0 flex flex-col justify-between p-1.5 md:p-2">
+                      {d.key === today ? (
+                        <span aria-hidden="true" class="invisible font-data text-[14px] font-bold leading-none md:text-[16px]">
+                          {d.day}
+                        </span>
+                      ) : (
+                        <span class={`font-data text-[14px] font-bold leading-none md:text-[16px] ${tcls}`}>
+                          {d.day}
+                        </span>
+                      )}
+                      {d.total > 0 && (() => {
+                        const done = [...new Set((dayInfo.get(d.key)?.entries || []).map((e) => e.area || "ingles"))];
+                        return (
+                          <span class="flex justify-end">
+                            <span class="flex items-center gap-0.5 rounded-full bg-black/70 px-1 py-0.5 leading-none md:gap-1.5 md:px-2 md:py-1">
+                              {done.map((a) => (
+                                <span key={a} style={{ color: AREA_COLOR[a] }} class="leading-none">
+                                  <AreaIcon area={a} class="block size-2.5 md:size-[18px]" />
+                                </span>
+                              ))}
+                            </span>
+                          </span>
+                        );
+                      })()}
+                    </span>
+                    {d.key === today && (
+                      <span class={`absolute left-0 top-0 border-b border-r border-chart-2 bg-chart-2 p-1.5 md:p-2 ${ccTl ? "rounded-tl-md rounded-br-xl" : "rounded-br-xl"}`}>
+                        <span class="block font-data text-[12px] font-bold leading-none text-background sm:text-[14px] md:text-[16px]">
+                          {d.day}
+                        </span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
       </div>
       <aside class="mt-3 md:mt-0 md:w-[260px] md:shrink-0">
         {apiRows === null ? (

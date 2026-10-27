@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
 import { ChartPie, LayoutGrid, LogOut, Plus, Table, Tags } from "lucide-preact";
-import { useMonths } from "./hooks/useMonths";
 import { authStatus, logout, saveLastMonth, USE_MOCK } from "./api.js";
 import { resolveMonth } from "./month.js";
 import { LockScreen } from "./components/LockScreen";
@@ -10,7 +9,6 @@ import { Activities } from "./pages/Activities";
 import { EntryForm } from "./pages/EntryForm";
 import { Modal } from "./components/ui/modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { MonthNav } from "./components/MonthNav";
 
 const VISTAS = [
   { value: "grilla", label: "Grilla", Icon: LayoutGrid },
@@ -22,7 +20,6 @@ const VISTAS = [
 export function App() {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const { months, retry } = useMonths();
   // FAB que abre el EntryForm en modal.
   const [regOpen, setRegOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -66,11 +63,6 @@ export function App() {
       window.removeEventListener("tt:auth", onAuth);
     };
   }, []);
-
-  function pick(key) {
-    if (!key) return;
-    navigate(`/?month=${key}`);
-  }
 
   function openNew() {
     setEditing(null);
@@ -150,16 +142,11 @@ export function App() {
               </button>
             )}
           </div>
-          <div class="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1 md:px-2">
-            <div class="w-full md:mx-auto md:max-w-[380px]">
-              <MonthNav months={months} value={month} onPick={pick} />
-            </div>
-          </div>
         </header>
         {current.value === "actividades" ? (
           <Activities month={month} />
         ) : (
-          <Graph months={months} vista={current.value} onEdit={openEdit} />
+          <Graph vista={current.value} onEdit={openEdit} />
         )}
       </div>
       <Modal open={regOpen} onClose={closeReg} label={editing ? "Editar" : "Registrar"}>

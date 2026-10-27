@@ -7,7 +7,6 @@ import { get, set } from "./storage.js";
 const API_BASE = import.meta.env?.VITE_API_BASE || "";
 
 const EP = Object.freeze({
-  MONTHS: "/months",
   ENTRIES: "/entries",
   ROWS: "/rows",
   STATUS: "/auth/status",
@@ -172,7 +171,7 @@ function normalizeEntry(e) {
   };
 }
 
-/* ---------- meses (antes hojas) ---------- */
+/* ---------- mes activo ---------- */
 
 export function lastMonth() {
   return get(LAST_KEY, "");
@@ -180,28 +179,6 @@ export function lastMonth() {
 
 export function saveLastMonth(key) {
   set(LAST_KEY, key || "");
-}
-
-/** Meses con datos ("YYYY-MM"), del server + los que traen pendientes en cola.
- *  Devuelve null si no se pudo (front muestra "sin datos" sin bloquearse). */
-export async function listMonths() {
-  let api = [];
-  if (USE_MOCK) {
-    api = Object.keys((await mockData()).rows || {});
-  } else {
-    try {
-      const data = await req(EP.MONTHS);
-      api = (Array.isArray(data) ? data : []).filter((k) => /^\d{4}-\d{2}$/.test(k));
-    } catch {
-      return null;
-    }
-  }
-  // Un registro en cola autocompleta su mes aunque el server no lo tenga.
-  for (const p of pending()) {
-    const k = typeof p?.date === "string" ? p.date.slice(0, 7) : "";
-    if (/^\d{4}-\d{2}$/.test(k)) api.push(k);
-  }
-  return [...new Set(api)].sort();
 }
 
 /* ---------- filas: siempre frescas de la API ---------- */

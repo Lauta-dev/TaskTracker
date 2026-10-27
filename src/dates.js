@@ -63,14 +63,6 @@ export function MONTH_LABEL(key) {
   return `${MESES[Number(m[2])]} ${m[1]}`;
 }
 
-// "2026-10" -> "Octubre".
-export function monthName(key) {
-  const m = String(key || "").match(/-(\d{2})$/);
-  if (!m) return "";
-  const n = MESES[Number(m[1])];
-  return n ? n.charAt(0).toUpperCase() + n.slice(1) : "";
-}
-
 // Grilla Lun->Dom del mes con nulls de relleno.
 export function monthCells(y, m) {
   const first = new Date(y, m - 1, 1);
