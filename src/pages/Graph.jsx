@@ -436,8 +436,8 @@ export function Graph({ onEdit, vista = "grilla" }) {
                   </button>
                 );
               })}
-              {/* Total de la semana, a la derecha. */}
-              <div class="flex aspect-square w-full flex-col items-end justify-end pb-2.5 md:pb-2">
+              {/* Total de la semana, a la derecha (estira toda la fila). */}
+              <div class="flex min-h-full w-full flex-col items-end justify-end pb-2.5 md:pb-2">
                 <span class={`font-data text-[12px] font-semibold leading-none md:text-[13px] ${weekTotals[wi] > 0 ? "text-foreground" : "text-muted-foreground/70"}`}>
                   {weekTotals[wi] > 0 ? fmtShort(weekTotals[wi]) : ""}
                 </span>
