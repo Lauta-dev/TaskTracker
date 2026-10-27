@@ -33,7 +33,6 @@ const LEVEL_BG = [
 ];
 
 /* Leyenda: 0 · <20 min · 20-39 · 40-59 · 60+. */
-const LEGEND = ["0", "<20", "20-39", "40-59", "60+"];
 const WDS = ["L", "M", "X", "J", "V", "S", "D"];
 
 /* Íconos por área para el card "Por área". */
@@ -43,8 +42,22 @@ const AREA_ICON = {
   ejercicio: Dumbbell,
 };
 
-/* Esquinas expuestas eliminadas: con gap + celdas redondeadas ya no
-   hay bordes compartidos, cada celda redondea en sí misma. */
+/* Esquinas expuestas: redondea donde la celda no tiene día vecino
+   (ni en vertical ni al costado). `hasDay(pos)` dice si esa posición
+   de la grilla de 7 columnas tiene día. */
+function exposedCorners(pos, hasDay) {
+  const col = pos % 7;
+  const above = pos >= 7 && hasDay(pos - 7);
+  const below = hasDay(pos + 7);
+  const left = col > 0 && hasDay(pos - 1);
+  const right = col < 6 && hasDay(pos + 1);
+  return [
+    !above && !left && "rounded-tl-md",
+    !above && !right && "rounded-tr-md",
+    !below && !left && "rounded-bl-md",
+    !below && !right && "rounded-br-md",
+  ].filter(Boolean).join(" ");
+}
 
 export function Graph({ onEdit, vista = "grilla" }) {
   const [path, navigate] = useLocation();
@@ -300,13 +313,13 @@ export function Graph({ onEdit, vista = "grilla" }) {
             </button>
           </div>
         </div>
-        <div class="grid gap-2.5 -mx-2.5 sm:-mx-3.5 md:mx-0 md:gap-3" style={{ gridTemplateColumns: "repeat(7, 1fr) 68px" }}>
+        <div class="grid gap-0 -mx-2 sm:-mx-4 md:mx-0" style={{ gridTemplateColumns: "repeat(7, 1fr) 68px" }}>
           {WDS.map((w) => (
-            <div key={w} class="font-data pb-0.5 text-center text-[12px] uppercase tracking-widest text-muted-foreground md:text-[13px]">
+            <div key={w} class="font-data pb-1 text-center text-[12px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[13px]">
               {w}
             </div>
           ))}
-          <div class="font-data pb-0.5 text-right text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">Semana</div>
+          <div class="font-data pb-1 text-right text-[10px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[11px]">Semana</div>
           {(apiRows === null ? skelWeeks : weeks).map((row, wi) => (
             <Fragment key={"w" + wi}>
               {row.map((d, ci) => {
@@ -316,26 +329,77 @@ export function Graph({ onEdit, vista = "grilla" }) {
                   if (d === null) {
                     if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" />;
                     if (i !== skelLast + 1) return null;
-                    return <div key="skel-total" aria-hidden="true" class="aspect-square w-full animate-pulse rounded-xl bg-muted" />;
+                    const span = skelCells.length - 1 - skelLast;
+                    return (
+                      <div
+                        key="skel-total"
+                        aria-hidden="true"
+                        style={{ gridColumn: span > 1 ? `${(i % 7) + 2} / span ${span}` : undefined }}
+                        class="min-h-full w-full animate-pulse rounded-br-md bg-muted"
+                      />
+                    );
                   }
+                  const skelBelow = i + 7;
+                  const skelRight = i % 7 < 6 ? i + 1 : -1;
+                  const skelBelowIsTotal = skelBelow > skelLast && skelBelow < skelCells.length;
+                  const skelRightIsTotal = skelRight !== -1 && skelRight > skelLast && skelRight < skelCells.length;
+                  const skelCc = exposedCorners(i, skelHas)
+                    .split(" ")
+                    .filter((c) => {
+                      if (skelBelowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
+                      if (skelRightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
+                      return true;
+                    })
+                    .join(" ");
                   return (
                     <div
                       key={"s" + i}
                       aria-hidden="true"
                       style={{ animationDelay: `${(i % 7) * 60}ms` }}
-                      class="aspect-square w-full animate-pulse rounded-xl bg-muted"
+                      class={`aspect-square w-full animate-pulse bg-muted ${skelCc}`}
                     />
                   );
                 }
                 if (d == null) {
-                  // Celda del mes anterior/siguiente (hueco puro).
-                  return <div key={"x" + i} aria-hidden="true" />;
+                  if (i <= lastIdx) return <div key={"x" + i} />;
+                  // Relleno final: un solo bloque que ocupa todos los espacios.
+                  if (i !== lastIdx + 1) return null;
+                  const span = cells.length - 1 - lastIdx;
+                  return (
+                    <div
+                      key="month-total"
+                      title={`Total del mes: ${fmtTotal(monthTotal)}`}
+                      style={{ gridColumn: span > 1 ? `${(i % 7) + 2} / span ${span}` : undefined }}
+                      class={`relative min-h-full w-full overflow-hidden border border-border rounded-br-md ${LEVEL_BG[monthLv]}`}
+                    >
+                      <span class="absolute inset-0 flex items-center justify-center p-1.5">
+                        <span class="font-data text-[14px] font-bold leading-none text-foreground md:text-[17px]">
+                          {fmtShort(monthTotal)}
+                        </span>
+                      </span>
+                    </div>
+                  );
                 }
                 const lv = level(d.total);
                 const isFuture = d.key > today && isCurrent;
                 const isToday = d.key === today;
                 const hasData = d.total > 0;
                 const done = [...new Set((dayInfo.get(d.key)?.entries || []).map((e) => e.area || "ingles"))];
+                // Empalme con el bloque del total: si abajo o a la derecha hay
+                // relleno del total (no día, pero tampoco vacío exterior), la
+                // última semana queda como una sola pieza sin muescas.
+                const belowPos = i + 7;
+                const rightPos = i % 7 < 6 ? i + 1 : -1;
+                const belowIsTotal = belowPos > lastIdx && belowPos < cells.length;
+                const rightIsTotal = rightPos !== -1 && rightPos > lastIdx && rightPos < cells.length;
+                const cc = exposedCorners(i, hasDay)
+                  .split(" ")
+                  .filter((c) => {
+                    if (belowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
+                    if (rightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
+                    return true;
+                  })
+                  .join(" ");
                 return (
                   <button
                     type="button"
@@ -343,11 +407,7 @@ export function Graph({ onEdit, vista = "grilla" }) {
                     disabled={!hasData}
                     onClick={() => openDay(d.key)}
                     title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-                    class={`relative aspect-square w-full overflow-hidden rounded-xl text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring ${
-                      lv === 0
-                        ? `border ${isFuture ? "border-dashed" : ""} border-border bg-muted`
-                        : `border border-border/40 ${LEVEL_BG[lv]}`
-                    } ${isToday ? "ring-2 ring-foreground/80" : ""} ${hasData ? "cursor-pointer" : "cursor-default"}`}
+                    class={`relative aspect-square w-full overflow-hidden border border-border text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${LEVEL_BG[lv]} ${cc} ${isFuture ? "border-dashed" : ""} ${isToday ? "after:absolute after:inset-0 after:rounded-[inherit] after:ring-2 after:ring-foreground/80" : ""} ${hasData ? "cursor-pointer" : "cursor-default"}`}
                   >
                     <span class="absolute inset-0 flex flex-col justify-between p-2 md:p-2.5">
                       <span class={`font-data text-[15px] font-bold leading-none md:text-[17px] ${lv >= 4 ? "text-background" : lv > 0 ? "text-foreground" : "text-muted-foreground"}`}>
@@ -377,21 +437,6 @@ export function Graph({ onEdit, vista = "grilla" }) {
               </div>
             </Fragment>
           ))}
-        </div>
-        {/* Leyenda: niveles en minutos y puertos Menos/Más. */}
-        <div class="mt-4 flex items-center justify-between px-1">
-          <p class="font-data text-[10px] text-muted-foreground md:text-[11px]">
-            {LEGEND.map((l, i) => (
-              <span key={i} class="border-r border-border pr-1.5 last:border-0 last:pr-0">{l}{i < LEGEND.length - 1 ? "" : " min"}</span>
-            ))}
-          </p>
-          <p class="flex items-center gap-2">
-            <span class="font-data text-[10px] text-muted-foreground md:text-[11px]">Menos</span>
-            {LEVEL_BG.map((bg, i) => (
-              <span key={i} class={`size-3.5 rounded-sm ${bg} ${i === 0 ? "border border-border" : ""}`} />
-            ))}
-            <span class="font-data text-[10px] text-muted-foreground md:text-[11px]">Más</span>
-          </p>
         </div>
       </div>
       <aside class="mt-6 space-y-3 md:mt-0 md:w-[300px] md:shrink-0">
