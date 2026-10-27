@@ -1,13 +1,12 @@
 import { useState } from "preact/hooks";
-import { Link, useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 import { DatePicker } from "../components/ui/date-picker";
 import { AreaIcon } from "../components/AreaIcon";
 import { COLS, AREAS, AREA_LABEL, postEntry, updateCells } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
 import { parseDuration } from "../parse.js";
-import { dayKey } from "../dates.js";
+import { dayKey, monthFromKey, MONTH_LABEL } from "../dates.js";
 import { fmtTotal, normalizeUrl, secsToHMS } from "../format.js";
-import { sheetFromSearch } from "../sheet.js";
 import { PRESETS, field, label } from "./entry-form/presets.js";
 import { EnglishForm } from "./entry-form/EnglishForm.jsx";
 import { MathForm } from "./entry-form/MathForm.jsx";
@@ -22,11 +21,10 @@ const AREA_FORMS = {
 
 /* Shell del formulario: área, día, form específico, contenido+url, nota y submit.
    Cada área vive en su archivo (entry-form/*) para no ensuciar este. */
-export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
+export function EntryForm({ onSaved, month, editing }) {
   const [, navigate] = useLocation();
-  const search = useSearch();
-  const sheet = sheetProp || sheetFromSearch(search);
-  const { rows } = useRows(sheet);
+  // Sugerencias dentro del mes activo.
+  const { rows } = useRows(month);
 
   const [area, setArea] = useState(
     editing?.area && AREAS.includes(editing.area) ? editing.area : "ingles",
@@ -81,10 +79,10 @@ export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
         changes.push({ col: COLS.hora, newValue: finalHora });
       }
       if (nota.trim() !== (editing.notas || "")) changes.push({ col: COLS.nota, newValue: nota.trim() });
-      updateCells(sheet, editing.row, changes).then(() => {
+      updateCells(editing.row, changes).then(() => {
         window.dispatchEvent(new Event("tt:rows"));
         if (onSaved) onSaved();
-        else navigate(`/?sheet=${encodeURIComponent(sheet)}`);
+        else navigate(month ? `/?month=${month}` : "/");
       }).catch(() => {
         setSending(false);
         setSubmitError("Sin conexión: no se pudo guardar el cambio.");
@@ -100,7 +98,6 @@ export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
       link: finalUrl,
       hora: finalHora,
       nota: nota.trim(),
-      sheet,
     }).then((res) => {
       if (res === "queued") {
         setSending(false);
@@ -109,26 +106,17 @@ export function EntryForm({ onSaved, sheet: sheetProp, editing }) {
       }
       window.dispatchEvent(new Event("tt:rows"));
       if (onSaved) onSaved();
-      else navigate(`/?sheet=${encodeURIComponent(sheet)}`);
+      else navigate(month ? `/?month=${month}` : "/");
     });
-  }
-
-  if (!sheet) {
-    return (
-      <div>
-        <h1 class="font-display text-[24px] font-semibold">Registrar</h1>
-        <p class="mt-2 text-sm text-muted-foreground">
-          Elegí una hoja primero. <Link href="/hojas" class="underline">Ir a Hojas</Link>
-        </p>
-      </div>
-    );
   }
 
   return (
     <div>
       <div class="mb-4">
         <h1 class="font-display text-[24px] font-semibold leading-tight md:text-[30px]">{editing ? "Editar" : "Registrar"}</h1>
-        <p class="mt-0.5 text-[14px] text-muted-foreground md:text-[16px]">{sheet}</p>
+        <p class="font-data mt-0.5 text-[14px] text-muted-foreground md:text-[16px]">
+          {monthFromKey(month) ? MONTH_LABEL(month) : "Mes actual"}
+        </p>
       </div>
 
       <form onSubmit={onSubmit} class="rounded-xl border border-border bg-card p-4">

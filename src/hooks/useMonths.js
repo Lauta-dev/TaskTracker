@@ -1,25 +1,25 @@
 import { useEffect, useState } from "preact/hooks";
-import { listSheets } from "../api.js";
+import { listMonths } from "../api.js";
 
-export function useSheets() {
-  const [names, setNames] = useState(null);
+/** Meses con datos ("YYYY-MM", cronológicos). null = cargando. */
+export function useMonths() {
+  const [months, setMonths] = useState(null);
   const [error, setError] = useState("");
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    // Carga inicial (y en cada retry).
-    listSheets().then(
+    listMonths().then(
       (list) => {
         if (!alive) return;
-        setNames(list);
+        setMonths(list || []);
         setError("");
       },
-      (e) => {
+      () => {
         if (!alive) return;
-        setNames([]);
-        setError(e?.message || "error de red");
-      }
+        setMonths(null);
+        setError("error de red");
+      },
     );
     return () => {
       alive = false;
@@ -29,5 +29,5 @@ export function useSheets() {
   // Fuerza refetch.
   const retry = () => setTick((t) => t + 1);
 
-  return { names, error, retry };
+  return { months, error, retry };
 }

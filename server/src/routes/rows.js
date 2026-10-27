@@ -1,30 +1,26 @@
 import { Hono } from "hono";
-import { MSG, QUERY } from "../constants.js";
+import { ENTRY, QUERY } from "../constants.js";
+import { yearMonthOf } from "../db/entries.js";
 import { listEntries } from "../db/entries.js";
-import { getSheetByName } from "../db/sheets.js";
-import { fail, HttpError, ok, STATUS } from "../http.js";
-import { parseId } from "../validators.js";
+import { fail, ok } from "../http.js";
 import { requireAuth } from "../auth.js";
 
-/* Alias de lectura para la migración del frontend:
+/* Lectura para el frontend:
    GET /rows                → todo
-   GET /rows?sheetId=1      → por id
-   GET /rows?sheet=Nombre   → por nombre */
+   GET /rows?year=2026      → por año
+   GET /rows?year=2026&month=10 → por mes */
 const rows = new Hono();
 
 rows.use("*", requireAuth);
 
 rows.get("/", async (c) => {
   try {
-    const byId = c.req.query(QUERY.SHEET_ID);
-    const byName = c.req.query(QUERY.SHEET);
-    if (byId != null) return ok(c, await listEntries(c.env.DB, parseId(byId)));
-    if (byName != null) {
-      const sheet = await getSheetByName(c.env.DB, byName);
-      if (!sheet) throw new HttpError(STATUS.NOT_FOUND, MSG.SHEET_NOT_FOUND);
-      return ok(c, await listEntries(c.env.DB, sheet.id));
-    }
-    return ok(c, await listEntries(c.env.DB));
+    const year = c.req.query(QUERY.YEAR);
+    const month = c.req.query(QUERY.MONTH);
+    const filters = {};
+    if (year != null && /^\d{4}$/.test(year)) filters.year = Number(year);
+    if (month != null && /^\d{1,2}$/.test(month)) filters.month = Number(month);
+    return ok(c, await listEntries(c.env.DB, filters));
   } catch (e) {
     return fail(c, e);
   }

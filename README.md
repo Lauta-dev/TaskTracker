@@ -1,21 +1,23 @@
 # Tinta · Log de inmersión
 
-Calendario de horas de inglés: a más horas, más color. App mobile-first instalable (PWA) que lee y escribe en su API propia (worker + D1).
+Calendario de horas de inmersión (inglés, ejercicio, matemática): a más horas, más color. App mobile-first instalable (PWA) que lee y escribe en su API propia (worker + D1).
 
 ## Vistas
 
 - **Grilla**: heatmap del mes (Lun–Dom) con el total del mes, objetivo 2h/día y detalle por día en drawer.
-- **Barras**: barras horizontales por día, con comparación de hasta 2 hojas (checkboxes).
-- **Tabla**: todos los registros de la hoja.
+- **Pastel**: duraciones totales por mes (con filtro por área).
+- **Tabla**: todos los registros del mes.
+- **Actividades**: gestión de tipos/fuentes propios por área.
 - **Registro**: FAB (+) que abre el formulario en modal (día, tipo, habilidad, duración, contenido, url, nota). Sin conexión, queda en cola y se manda solo.
 
-La hoja activa viaja en `?sheet=`. El mes se toma de las filas (o del celu si no hay).
+El mes activo viaja en `?month=YYYY-MM` y se navega con ◀ ▶ (MonthNav): el mes existe en cuanto hay una entrada con esa fecha, no hay hojas que crear.
 
 ## Datos
 
-- Lectura: `GET ?action=getSheet` (lista) y `GET ?sheet=<nombre>` (matriz).
-- Escritura: `POST {fecha, habilidad, recurso, contenido, link, hora, nota, sheet}`.
-- En local solo viven: nombres de hojas creadas acá, cola pendiente, última hoja y tema.
+- Una sola tabla `entries`; cada fila lleva `date` (YYYY-MM-DD) y `year`/`month`, derivados por el server.
+- Lectura: `GET /months` (meses con datos) y `GET /rows?year=&month=` (opcional: sin filtros = todo).
+- Escritura: `POST /entries {date, type, source, content, duration, note, url, area}` y `PATCH/DELETE /entries/:id`.
+- En local solo viven: cola pendiente (global) y último mes visto.
 
 ## Configuración
 
@@ -25,9 +27,10 @@ VITE_API_BASE=http://127.0.0.1:8787
 ```
 
 ```bash
-npm run dev      # desarrollo con VITE_API_BASE del .env (reiniciar si cambia)
-npm run build    # producción a dist/ con API_BASE del entorno
-npm run preview  # probar el build
+npm run dev        # front en :5173
+npm run dev:server # API (wrangler dev) en :8787
+npm run build      # producción a dist/ con API_BASE del entorno
+npm run preview    # probar el build
 ```
 
 ```bash
@@ -42,7 +45,7 @@ Duración (redondeada: resto > 30s sube, si no baja) si están vacíos.
 
 ## Áreas
 
-Hojas mixtas: cada registro lleva `área` (`ingles` | `ejercicio` | `matematica`).
+Entradas mixtas: cada registro lleva `area` (`ingles` | `ejercicio` | `matematica`).
 Todos comparten los mismos gráficos; el drawer del día muestra una barra
 repartida en 3 colores (uno por área) y la lista agrupada por área.
 El formulario adapta tipos/fuentes por área y en ejercicio la duración es
@@ -56,28 +59,39 @@ Sesión en cookie `HttpOnly` (`tt_session`): el JS nunca ve el token.
   (`users` + `sessions`), anti-CSRF por `Origin` + `SameSite=Lax`.
 - La cuenta se crea una sola vez: `POST /auth/setup` solo anda con la tabla
   `users` vacía (después responde 403, no hay registro público).
-- Aplicar esquema: `wrangler d1 execute DB --file=./schema.sql [--remote]`.
-- DBs existentes (sin columna `area`): `wrangler d1 execute DB --file=./migrate-area.sql [--remote]` (backfill a `ingles`).
 - Orígenes extra del front (CORS/CSRF): `ALLOWED_ORIGINS` en `wrangler.toml`.
+
+## Migraciones (DB existentes, aplicar en orden)
+
+```bash
+cd server
+wrangler d1 execute DB --file=./migrate-area.sql --remote          # column area (muy viejo)
+wrangler d1 execute DB --file=./migrate-single-table.sql --remote  # DB única: year/month en entries, fuera sheets
+```
+
+DB nueva: `wrangler d1 execute DB --file=./schema.sql [--remote]` y, si querés datos de ejemplo, `--file=./seed.sql`.
 
 ## Estructura
 
 ```
+server/             # worker Hono + D1 (workspace aparte)
+  src/routes/       # auth, entries, months, rows
+  src/db/           # users, sessions, entries
 src/
-  api.js            # listSheets / getRows / postEntry / cola offline
-  parse.js          # matriz API → filas, duración humana → segs
-  dates.js          # keys locales, mes actual, celdas Lun–Dom
+  api.js            # listMonths / getRows(month) / postEntry / cola offline global
+  parse.js          # matrices mock → filas, duración humana → segs
+  dates.js          # keys locales, meses (label/fromKey), celdas Lun–Dom
+  month.js          # ?month= → mes resuelto
   format.js         # fmtTotal, secsToHMS, normalizeUrl, level
   storage.js        # localStorage seguro (JSON)
-  sheet.js          # ?sheet= → hoja resuelta
-  hooks/            # useSheets, useRows ({data, loading, error, retry})
-  pages/            # Graph, Registro
-  components/       # SheetPicker, Bars, ui/* (select, sheet, modal…)
+  hooks/            # useMonths, useRows
+  pages/            # Graph, Activities, EntryForm (form por área en entry-form/*)
+  components/       # MonthNav, Pie, LockScreen, ui/*
 ```
 
 ## Mock
 
-`src/mock/data.json` con datos congelados (hojas + matrices). En dev el front usa el mock
-automáticamente para testear los gráficos: grilla y barras leen las matrices, y el pastel
-agrupa `sheets + rows` del propio mock como hace `getMonthlyTotals` con `GET /sheets` +
-`GET /rows`. El build de prod va contra la API real. El pill "mock" del header indica el modo.
+`src/mock/data.json` con datos congelados (rows por mes, `"2026-08"`…). En dev el front
+usa el mock automáticamente para testear los gráficos (y el pastel agrupa como hace
+`getMonthlyTotals`). El build de prod va contra la API real. El pill "mock" del header
+indica el modo.

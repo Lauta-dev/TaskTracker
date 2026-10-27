@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { ChartColumn, ChartPie, LayoutGrid, LogOut, Plus, Table, Tags } from "lucide-preact";
-import { useSheets } from "./hooks/useSheets";
-import { authStatus, logout, saveLastSheet, USE_MOCK } from "./api.js";
+import { ChartPie, LayoutGrid, LogOut, Plus, Table, Tags } from "lucide-preact";
+import { useMonths } from "./hooks/useMonths";
+import { authStatus, logout, saveLastMonth, USE_MOCK } from "./api.js";
+import { resolveMonth } from "./month.js";
 import { LockScreen } from "./components/LockScreen";
 import { Graph } from "./pages/Graph";
 import { Activities } from "./pages/Activities";
 import { EntryForm } from "./pages/EntryForm";
 import { Modal } from "./components/ui/modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { SheetPicker } from "./components/SheetPicker";
-import { resolveSheet } from "./sheet";
+import { MonthNav } from "./components/MonthNav";
 
 const VISTAS = [
   { value: "grilla", label: "Grilla", Icon: LayoutGrid },
-  { value: "barras", label: "Barras", Icon: ChartColumn },
   { value: "pastel", label: "Pastel", Icon: ChartPie },
   { value: "tabla", label: "Tabla", Icon: Table },
   { value: "actividades", label: "Actividades", Icon: Tags },
@@ -23,7 +22,7 @@ const VISTAS = [
 export function App() {
   const [, navigate] = useLocation();
   const search = useSearch();
-  const sheets = useSheets();
+  const { months, retry } = useMonths();
   // FAB que abre el EntryForm en modal.
   const [regOpen, setRegOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -34,16 +33,14 @@ export function App() {
   authRef.current = auth.state;
   const current = VISTAS.find((v) => v.value === vista) || VISTAS[0];
 
-  // La lista se pide una sola vez acá y baja por props.
-  // Se pasa `names` sin forzar []: null = aún cargando (resolveSheet usa
-  // ?sheet=/última para mostrar datos enseguida).
-  const sheet = resolveSheet(search, sheets.names);
+  // Mes activo: ?month= → último visto → mes actual del dispositivo.
+  const month = resolveMonth(search);
 
-  // La resuelta es la última usada: persiste en localStorage para que el
-  // próximo arranque (y el fetch de filas) la reutilice si existe.
+  // El mes activo es el último usado: persiste en localStorage para que el
+  // próximo arranque (y el fetch de filas) lo reutilice si existe.
   useEffect(() => {
-    if (sheet) saveLastSheet(sheet);
-  }, [sheet]);
+    if (month) saveLastMonth(month);
+  }, [month]);
 
   // El 401 (sesión vencida/inválida) re-chequea solo si estábamos en la app:
   // si ya muestra el lock, no hace nada (evita loop de reintentos).
@@ -70,9 +67,9 @@ export function App() {
     };
   }, []);
 
-  function pick(name) {
-    saveLastSheet(name);
-    navigate(`/?sheet=${encodeURIComponent(name)}`);
+  function pick(key) {
+    if (!key) return;
+    navigate(`/?month=${key}`);
   }
 
   function openNew() {
@@ -155,18 +152,18 @@ export function App() {
           </div>
           <div class="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1 md:px-2">
             <div class="w-full md:mx-auto md:max-w-[380px]">
-              <SheetPicker names={sheets.names} sheet={sheet} onPick={pick} onListChanged={sheets.retry} />
+              <MonthNav months={months} value={month} onPick={pick} />
             </div>
           </div>
         </header>
-        {vista === "actividades" ? (
-          <Activities sheet={sheet} />
+        {current.value === "actividades" ? (
+          <Activities month={month} />
         ) : (
-          <Graph names={sheets.names} vista={vista} onEdit={openEdit} />
+          <Graph months={months} vista={current.value} onEdit={openEdit} />
         )}
       </div>
       <Modal open={regOpen} onClose={closeReg} label={editing ? "Editar" : "Registrar"}>
-        {regOpen && <EntryForm key={editing?.row || "new"} sheet={sheet} editing={editing} onSaved={closeReg} />}
+        {regOpen && <EntryForm key={editing?.row || "new"} month={month} editing={editing} onSaved={closeReg} />}
       </Modal>
     </div>
   );

@@ -1,18 +1,18 @@
 import { useEffect, useState } from "preact/hooks";
 import { getRows } from "../api.js";
 
-export function useRows(sheet) {
+/** Filas de un mes ("YYYY-MM") o de todos (null). */
+export function useRows(month) {
   const [rows, setRows] = useState(null);
   const [live, setLive] = useState(true);
   const [error, setError] = useState("");
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    if (!sheet) return;
     let alive = true;
-    // Recarga al cambiar de hoja.
+    // Recarga al cambiar de mes (o al pasar de null).
     setRows(null);
-    getRows(sheet).then((res) => {
+    getRows(month).then((res) => {
       if (!alive) return;
       setRows(res.rows);
       setLive(res.live);
@@ -26,7 +26,7 @@ export function useRows(sheet) {
     return () => {
       alive = false;
     };
-  }, [sheet, tick]);
+  }, [month, tick]);
 
   useEffect(() => {
     // Un guardado avisa y se refetchea (ej. modal de EntryForm).
@@ -38,6 +38,5 @@ export function useRows(sheet) {
   // Fuerza refetch.
   const retry = () => setTick((t) => t + 1);
 
-  if (!sheet) return { rows: [], live: true, error: "", retry };
   return { rows, live, error, retry };
 }

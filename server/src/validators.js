@@ -1,11 +1,9 @@
 import {
   AREAS,
-  BODY,
   ENTRY,
   ENTRY_REQUIRED,
   ENTRY_UPDATABLE,
   MAX_PASSWORD_LEN,
-  MAX_SHEET_NAME,
   MAX_USERNAME_LEN,
   MIN_PASSWORD_LEN,
   MIN_USERNAME_LEN,
@@ -30,20 +28,6 @@ function asString(value, field, { allowEmpty = false } = {}) {
     throw new HttpError(STATUS.BAD_REQUEST, MSG.FIELD_REQUIRED(field));
   }
   return value;
-}
-
-/* POST /sheets */
-export function validateSheetCreate(body) {
-  const name = asString(body?.name, "name").trim();
-  if (name.length > MAX_SHEET_NAME) {
-    throw new HttpError(STATUS.BAD_REQUEST, MSG.SHEET_NAME_TOO_LONG);
-  }
-  return { name };
-}
-
-/* PATCH /sheets/:id: mismo contrato que crear. */
-export function validateSheetUpdate(body) {
-  return validateSheetCreate(body);
 }
 
 /* POST /auth/setup y /auth/login: username + password con política mínima. */
@@ -80,7 +64,7 @@ export function validateLogin(body) {
   return { username: validateUsername(body?.username), password: validatePassword(body?.password) };
 }
 
-/* POST /entries: devuelve { entry, sheetId?, sheetName? } ya normalizado. */
+/* POST /entries: entry ya normalizado (sin hoja: year/month los deriva el server). */
 export function validateEntryCreate(body) {
   const entry = {};
   for (const field of ENTRY_REQUIRED) {
@@ -89,19 +73,10 @@ export function validateEntryCreate(body) {
   if (!AREAS.includes(entry[ENTRY.AREA])) {
     throw new HttpError(STATUS.BAD_REQUEST, `Field 'area' must be one of: ${AREAS.join(", ")}`);
   }
-  const sheetId = body?.[BODY.SHEET_ID] ?? null;
-  const sheetName = body?.[BODY.SHEET] ?? null;
-  if (sheetId == null && sheetName == null) {
-    throw new HttpError(STATUS.BAD_REQUEST, MSG.SHEET_REF_REQUIRED);
-  }
-  return {
-    entry,
-    sheetId: sheetId == null ? null : parseId(sheetId),
-    sheetName: sheetName == null ? null : String(sheetName),
-  };
+  return entry;
 }
 
-/* PATCH /entries/:id: objeto con al menos un campo válido. */
+/* PATCH /entries/:id: objeto con al menos un campo válido (date valida en la ruta). */
 export function validateEntryPatch(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpError(STATUS.BAD_REQUEST, MSG.EMPTY_PATCH);
@@ -111,8 +86,7 @@ export function validateEntryPatch(body) {
     if (!ENTRY_UPDATABLE.includes(field)) {
       throw new HttpError(STATUS.BAD_REQUEST, MSG.UNKNOWN_FIELD(field));
     }
-    patch[field] =
-      field === "sheet_id" ? parseId(value) : asString(value, field, { allowEmpty: true });
+    patch[field] = asString(value, field, { allowEmpty: true });
   }
   if (patch[ENTRY.AREA] !== undefined && !AREAS.includes(patch[ENTRY.AREA])) {
     throw new HttpError(STATUS.BAD_REQUEST, `Field 'area' must be one of: ${AREAS.join(", ")}`);

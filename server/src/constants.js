@@ -2,19 +2,14 @@
    Nada de strings sueltos en queries ni rutas. */
 
 export const TABLES = Object.freeze({
-  SHEETS: "sheets",
   ENTRIES: "entries",
-});
-
-export const SHEET = Object.freeze({
-  ID: "id",
-  NAME: "name",
 });
 
 export const ENTRY = Object.freeze({
   ID: "id",
-  SHEET_ID: "sheet_id",
   DATE: "date",
+  YEAR: "year",
+  MONTH: "month",
   TYPE: "type",
   SOURCE: "source",
   CONTENT: "content",
@@ -24,7 +19,8 @@ export const ENTRY = Object.freeze({
   AREA: "area",
 });
 
-/* Campos obligatorios al crear (miran el NOT NULL del schema). */
+/* Campos obligatorios al crear (miran el NOT NULL del schema).
+   year/month NO vienen del cliente: el server los deriva de date. */
 export const ENTRY_REQUIRED = Object.freeze([
   ENTRY.DATE,
   ENTRY.TYPE,
@@ -40,18 +36,13 @@ export const ENTRY_REQUIRED = Object.freeze([
 export const AREAS = Object.freeze(["ingles", "ejercicio", "matematica"]);
 
 /* Campos que acepta el PATCH (todo menos el id). */
-export const ENTRY_UPDATABLE = Object.freeze([...ENTRY_REQUIRED, ENTRY.SHEET_ID]);
+export const ENTRY_UPDATABLE = Object.freeze([...ENTRY_REQUIRED]);
 
-/* Params de ruta: /sheets/:id, /entries/:id */
+/* Params de ruta: /entries/:id */
 export const PARAM = Object.freeze({ ID: "id" });
 
-/* Query params: /rows?sheetId=1 o ?sheet=Nombre */
-export const QUERY = Object.freeze({ SHEET_ID: "sheetId", SHEET: "sheet" });
-
-/* Body del POST /entries: sheetId o sheet (nombre), uno de los dos. */
-export const BODY = Object.freeze({ SHEET_ID: "sheetId", SHEET: "sheet" });
-
-export const MAX_SHEET_NAME = 120;
+/* Query params: /rows?year=2026&month=10 */
+export const QUERY = Object.freeze({ YEAR: "year", MONTH: "month" });
 
 /* Auth: límites del setup/login. */
 export const MIN_USERNAME_LEN = 3;
@@ -62,12 +53,8 @@ export const MAX_PASSWORD_LEN = 128;
 export const MSG = Object.freeze({
   NOT_FOUND: "Not found",
   INVALID_ID: "Invalid id: must be a positive integer",
-  SHEET_NAME_REQUIRED: "Sheet name is required",
-  SHEET_NAME_TOO_LONG: `Sheet name must be at most ${MAX_SHEET_NAME} characters`,
-  SHEET_EXISTS: "Sheet already exists",
-  SHEET_NOT_FOUND: "Sheet not found",
   ENTRY_NOT_FOUND: "Entry not found",
-  SHEET_REF_REQUIRED: "Provide sheetId or sheet (name)",
+  INVALID_DATE: "Field 'date' must be a valid date (YYYY-MM-DD)",
   FIELD_REQUIRED: (field) => `Field '${field}' is required`,
   FIELD_MUST_BE_STRING: (field) => `Field '${field}' must be a string`,
   EMPTY_PATCH: "Nothing to update: provide at least one field",

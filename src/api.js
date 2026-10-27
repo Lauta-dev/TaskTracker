@@ -1,13 +1,13 @@
-import { dateKey } from "./dates.js";
+import { dateKey, MONTH_LABEL } from "./dates.js";
 import { parseDuration, parseRows, parseSheetDuration } from "./parse.js";
-import { del, get, set } from "./storage.js";
+import { get, set } from "./storage.js";
 
 /* Cliente de la API REST (Hono + D1). Un solo lugar para base,
    endpoints, campos y estados: nada de strings sueltos abajo. */
 const API_BASE = import.meta.env?.VITE_API_BASE || "";
 
 const EP = Object.freeze({
-  SHEETS: "/sheets",
+  MONTHS: "/months",
   ENTRIES: "/entries",
   ROWS: "/rows",
   STATUS: "/auth/status",
@@ -16,10 +16,9 @@ const EP = Object.freeze({
   LOGOUT: "/auth/logout",
 });
 
-/* Campos del POST/PATCH (los que acepta el backend). */
+/* Campos del POST/PATCH (los que acepta el backend).
+   year/month no viajan: el server los deriva de date. */
 const F = Object.freeze({
-  SHEET: "sheet",
-  SHEET_ID: "sheetId",
   DATE: "date",
   TYPE: "type",
   SOURCE: "source",
@@ -29,8 +28,6 @@ const F = Object.freeze({
   URL: "url",
   AREA: "area",
 });
-
-const QP = Object.freeze({ SHEET: "sheet" });
 
 /* Resultado de postEntry: lo consume EntryForm ("queued" muestra aviso). */
 const SEND = Object.freeze({ SENT: "sent", QUEUED: "queued" });
@@ -44,14 +41,20 @@ async function mockData() {
   return mockCache;
 }
 
-// Nombres creados sin conexión, pendientes de subir al servidor.
-// Cuando el sync los confirma en la DB, salen de esta lista.
-const SHEETS_KEY = "tt-sheets";
 // Entradas cuyo POST falló; se reintentan después.
-// v2: payloads REST.
-const PENDING_KEY = "tt-pending-v2";
-// Última hoja usada.
-const LAST_KEY = "tt-sheet";
+// v2: payloads REST. v3: sin sheet (la cola queda global, mesa única).
+const PENDING_KEY = "tt-pending-v3";
+// Último mes (YYYY-MM) visto.
+const LAST_KEY = "tt-month";
+
+// Limpieza one-shot de llaves del esquema viejo (hojas).
+for (const old of ["tt-sheets", "tt-sheet"]) {
+  try {
+    localStorage.removeItem(old);
+  } catch {
+    // sin localStorage disponible
+  }
+}
 
 /* Sesión en cookie HttpOnly: el front nunca ve el token.
    El 401 invalida la vista (tt:auth avisa a la UI para mostrar el lock). */
@@ -132,7 +135,7 @@ async function req(path, { method = "GET", body } = {}, { timeout = 15000, retri
 /* Columnas 1-based históricas (las usa EntryForm para armar changes). */
 export const COLS = { fecha: 1, habilidad: 2, recurso: 3, contenido: 4, hora: 5, nota: 6, area: 7 };
 
-/* Áreas (hojas mixtas). */
+/* Áreas (entradas mixtas, una por fila). */
 export const AREAS = Object.freeze(["ingles", "ejercicio", "matematica"]);
 export const AREA_LABEL = Object.freeze({ ingles: "Inglés", ejercicio: "Ejercicio", matematica: "Matemática" });
 
@@ -169,191 +172,36 @@ function normalizeEntry(e) {
   };
 }
 
-/* ---------- hojas ---------- */
+/* ---------- meses (antes hojas) ---------- */
 
-export function localSheets() {
-  const v = get(SHEETS_KEY, []);
-  return Array.isArray(v) ? v.filter((n) => typeof n === "string") : [];
-}
-
-function saveLocalSheet(name) {
-  const list = localSheets();
-  if (!list.includes(name)) list.push(name);
-  return set(SHEETS_KEY, list);
-}
-
-/* Crea en el servidor; sin conexión cae a la lista local. */
-export async function createSheet(name) {
-  const clean = String(name || "").trim();
-  if (!clean) return false;
-  try {
-    await req(EP.SHEETS, { method: "POST", body: { name: clean } });
-    return true;
-  } catch {
-    return saveLocalSheet(clean);
-  }
-}
-
-export async function deleteSheet(name) {
-  set(SHEETS_KEY, localSheets().filter((n) => n !== name));
-  set(PENDING_KEY, pending().filter((p) => p.sheet !== name));
-  if (get(LAST_KEY, "") === name) del(LAST_KEY);
-  try {
-    const sheets = await req(EP.SHEETS);
-    const found = (Array.isArray(sheets) ? sheets : []).find((s) => s?.name === name);
-    if (found) await req(`${EP.SHEETS}/${found.id}`, { method: "DELETE" });
-  } catch {
-    // ya se limpió lo local; el servidor queda para el próximo retry
-  }
-  return true;
-}
-
-/* Renombra en servidor y/o local. Actualiza última hoja y cola pendiente.
-   Lanza Error con el mensaje a mostrar ("Ya existe...", sin conexión, etc.). */
-export async function renameSheet(oldName, newName) {
-  const from = String(oldName || "").trim();
-  const clean = String(newName || "").trim();
-  if (!from || !clean) throw new Error("Escribí un nombre.");
-  if (clean === from) return true;
-  if (clean.length > 120) throw new Error("Máximo 120 caracteres.");
-  const locals = localSheets();
-  const wasLocal = locals.includes(from);
-  const clashLocal = locals.includes(clean);
-
-  // Cola y última hoja siguen al nuevo nombre aunque falle la red.
-  set(PENDING_KEY, pending().map((p) => (p.sheet === from ? { ...p, sheet: clean } : p)));
-  if (get(LAST_KEY, "") === from) set(LAST_KEY, clean);
-
-  if (USE_MOCK) {
-    if (wasLocal || !clashLocal) {
-      set(SHEETS_KEY, locals.map((n) => (n === from ? clean : n)));
-      return true;
-    }
-    throw new Error("Ya existe una hoja con ese nombre.");
-  }
-
-  try {
-    const sheets = await req(EP.SHEETS);
-    const arr = Array.isArray(sheets) ? sheets : [];
-    if (arr.some((s) => s?.name === clean)) throw new Error("Ya existe una hoja con ese nombre.");
-    const found = arr.find((s) => s?.name === from);
-    if (found) {
-      await req(`${EP.SHEETS}/${found.id}`, { method: "PATCH", body: { name: clean } });
-      // Servidor manda: sale de la lista local en ambos extremos.
-      set(SHEETS_KEY, localSheets().filter((n) => n !== from && n !== clean));
-      return true;
-    }
-  } catch (e) {
-    if (e?.status === 409 || /ya existe/i.test(e?.message || "")) {
-      throw new Error("Ya existe una hoja con ese nombre.");
-    }
-    if (e?.status) throw e;
-    // Sin red: cae al renombre local.
-  }
-
-  if (wasLocal) {
-    if (clashLocal) throw new Error("Ya existe una hoja con ese nombre.");
-    set(SHEETS_KEY, locals.map((n) => (n === from ? clean : n)));
-    return true;
-  }
-  throw new Error("Sin conexión: no se pudo renombrar.");
-}
-
-export function lastSheet() {
+export function lastMonth() {
   return get(LAST_KEY, "");
 }
 
-export function saveLastSheet(name) {
-  set(LAST_KEY, name || "");
+export function saveLastMonth(key) {
+  set(LAST_KEY, key || "");
 }
 
-/** Sube al servidor las hojas creadas sin conexión.
- * Devuelve las confirmadas (creadas o 409: ya existían). Las que siguen
- * fallando quedan en la lista local para el próximo intento. */
-async function syncLocalSheets(apiNames) {
-  const onServer = new Set(apiNames);
-  const keep = [];
-  const pushed = [];
-  for (const name of localSheets()) {
-    if (onServer.has(name)) continue;
-    try {
-      await req(EP.SHEETS, { method: "POST", body: { name } });
-      pushed.push(name);
-    } catch (e) {
-      if (e?.status === 409) {
-        pushed.push(name);
-        continue;
-      }
-      keep.push(name);
-    }
-  }
-  set(SHEETS_KEY, keep);
-  return pushed;
-}
-
-/** Una sola lista: API + locales, sin duplicados. */
-export async function listSheets() {
+/** Meses con datos ("YYYY-MM"), del server + los que traen pendientes en cola.
+ *  Devuelve null si no se pudo (front muestra "sin datos" sin bloquearse). */
+export async function listMonths() {
   let api = [];
   if (USE_MOCK) {
-    api = [...((await mockData()).sheets || [])];
+    api = Object.keys((await mockData()).rows || {});
   } else {
     try {
-      const data = await req(EP.SHEETS);
-      api = (Array.isArray(data) ? data : []).map((s) => s?.name).filter((n) => typeof n === "string");
-      // Lo creado en la página termina en la DB: si algo quedó solo local, se sube ahora.
-      api = [...api, ...(await syncLocalSheets(api))];
+      const data = await req(EP.MONTHS);
+      api = (Array.isArray(data) ? data : []).filter((k) => /^\d{4}-\d{2}$/.test(k));
     } catch {
-      api = [];
+      return null;
     }
   }
-  return [...new Set([...api, ...localSheets()])];
-}
-
-/** Etiqueta corta para el pie: "Inglés - 2026 Septiembre" → "Septiembre". */
-function shortMonth(name) {
-  const t = String(name || "").trim();
-  const after = t.includes(" - ") ? t.split(" - ").pop().trim() : t;
-  const parts = after.split(/\s+/);
-  return parts[parts.length - 1] || t;
-}
-
-/** Totales por mes para el pastel: 2 GET (sheets + rows) y se agrupa acá.
- * En mock se agrupa igual desde data.json (una hoja ≈ un mes).
- * Con area, suma solo sus filas. */
-export async function getMonthlyTotals(area = null) {
-  const only = AREAS.includes(area) ? area : null;
-  const totals = new Map();
-  if (USE_MOCK) {
-    const m = await mockData();
-    for (const name of m.sheets || []) {
-      let t = 0;
-      for (const r of parseRows(m.rows?.[name] || [])) {
-        if (only && (r.area || "ingles") !== only) continue;
-        t += r.secs;
-      }
-      if (t > 0) totals.set(name, t);
-    }
-  } else {
-    const [sheets, rows] = await Promise.all([req(EP.SHEETS), req(EP.ROWS)]);
-    const arr = Array.isArray(sheets) ? sheets : [];
-    const secsById = new Map();
-    for (const e of Array.isArray(rows) ? rows : []) {
-      const r = normalizeEntry(e);
-      if (!r || typeof e?.sheet_id !== "number") continue;
-      if (only && r.area !== only) continue;
-      secsById.set(e.sheet_id, (secsById.get(e.sheet_id) || 0) + r.secs);
-    }
-    // El orden lo define la API (/sheets cronológico): acá no se sortea.
-    for (const s of arr) {
-      const total = secsById.get(s?.id) || 0;
-      if (total > 0 && s?.name) totals.set(s.name, total);
-    }
+  // Un registro en cola autocompleta su mes aunque el server no lo tenga.
+  for (const p of pending()) {
+    const k = typeof p?.date === "string" ? p.date.slice(0, 7) : "";
+    if (/^\d{4}-\d{2}$/.test(k)) api.push(k);
   }
-  const out = [];
-  for (const [month, total] of totals) {
-    if (total > 0) out.push({ month, label: shortMonth(month), total });
-  }
-  return out;
+  return [...new Set(api)].sort();
 }
 
 /* ---------- filas: siempre frescas de la API ---------- */
@@ -363,8 +211,11 @@ function pending() {
   return Array.isArray(v) ? v : [];
 }
 
-function pendingFor(sheet) {
-  return pending().filter((p) => p.sheet === sheet);
+/* Pendientes de un mes ("2026-10"); sin prefix = todos. */
+function pendingFor(prefix) {
+  const list = pending();
+  if (!prefix) return list;
+  return list.filter((p) => typeof p?.date === "string" && p.date.slice(0, 7) === prefix);
 }
 
 /** La cola ya guarda payloads REST; se normalizan a fila para la grilla. */
@@ -374,19 +225,58 @@ function pendingToRow(p) {
   return { ...r, row: null };
 }
 
-export async function getRows(sheet) {
+/** Filas de un mes ("2026-10") o de todos (null). */
+export async function getRows(month = null) {
   try {
     if (USE_MOCK) {
-      const matrix = (await mockData()).rows?.[sheet] || [];
-      const queued = pendingFor(sheet).map(pendingToRow).filter(Boolean);
-      return { rows: parseRows(matrix).concat(queued), live: true, error: "" };
+      const m = await mockData();
+      let rows = [];
+      if (month) rows = parseRows(m.rows?.[month] || []);
+      else {
+        for (const key of Object.keys(m.rows || {}).sort()) rows = rows.concat(parseRows(m.rows[key] || []));
+      }
+      return { rows: rows.concat(pendingFor(month).map(pendingToRow).filter(Boolean)), live: true, error: "" };
     }
-    const data = await req(`${EP.ROWS}?${QP.SHEET}=${encodeURIComponent(sheet)}`);
-    const queued = pendingFor(sheet).map(pendingToRow).filter(Boolean);
-    return { rows: (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean).concat(queued), live: true, error: "" };
+    const qs = new URLSearchParams();
+    if (month) {
+      qs.set("year", month.slice(0, 4));
+      qs.set("month", String(Number(month.slice(5, 7))));
+    }
+    const q = qs.toString();
+    const data = await req(q ? `${EP.ROWS}?${q}` : EP.ROWS);
+    return {
+      rows: (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean)
+        .concat(pendingFor(month).map(pendingToRow).filter(Boolean)),
+      live: true,
+      error: "",
+    };
   } catch (e) {
-    return { rows: pendingFor(sheet).map(pendingToRow).filter(Boolean), live: false, error: e?.message || "error de red" };
+    return { rows: pendingFor(month).map(pendingToRow).filter(Boolean), live: false, error: e?.message || "error de red" };
   }
+}
+
+/** Totales por mes para el pastel: un solo GET (todo) y se agrupa acá.
+ *  Con area, suma solo sus filas. */
+export async function getMonthlyTotals(area = null) {
+  const only = AREAS.includes(area) ? area : null;
+  let rows;
+  if (USE_MOCK) {
+    rows = (await getRows(null)).rows;
+  } else {
+    const data = await req(EP.ROWS);
+    rows = (Array.isArray(data) ? data : []).map(normalizeEntry).filter(Boolean);
+  }
+  const totals = new Map();
+  for (const r of rows) {
+    if (only && r.area !== only) continue;
+    const month = r.key?.slice(0, 7);
+    if (!month) continue;
+    totals.set(month, (totals.get(month) || 0) + r.secs);
+  }
+  const y = [...totals.keys()].sort();
+  return y
+    .filter((k) => totals.get(k) > 0)
+    .map((k) => ({ month: k, label: MONTH_LABEL(k), total: totals.get(k) }));
 }
 
 /* ---------- escribir: POST, si falla se encola ---------- */
@@ -396,7 +286,6 @@ export async function getRows(sheet) {
    payloads en cola con formato ISO legacy. */
 function toPayload(entry) {
   return {
-    [F.SHEET]: entry.sheet,
     [F.DATE]: String(entry.fecha ?? "").slice(0, 10),
     [F.TYPE]: entry.habilidad,
     [F.SOURCE]: entry.recurso,
@@ -435,7 +324,7 @@ export async function retryPending() {
 }
 
 /** Actualiza por id: changes = [{ col (1-based), newValue }]. Un solo PATCH. */
-export async function updateCells(sheet, row, changes) {
+export async function updateCells(row, changes) {
   const patch = {};
   for (const c of changes || []) {
     const field = FIELD_BY_COL[c.col];
@@ -452,10 +341,10 @@ export async function updateCells(sheet, row, changes) {
 }
 
 /** Borra una entrada por id. Lanza si falla. */
-export async function deleteRowApi(sheet, row) {
+export async function deleteRowApi(row) {
   await req(`${EP.ENTRIES}/${row}`, { method: "DELETE" });
 }
 
-export function pendingCount(sheet) {
-  return sheet ? pendingFor(sheet).length : pending().length;
+export function pendingCount(prefix) {
+  return pendingFor(prefix).length;
 }

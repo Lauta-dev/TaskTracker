@@ -1,10 +1,10 @@
 import { useEffect, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { deleteRowApi, getMonthlyTotals, localSheets, pendingCount, saveLastSheet, AREAS, AREA_LABEL } from "../api.js";
+import { deleteRowApi, getMonthlyTotals, pendingCount, AREAS, AREA_LABEL } from "../api.js";
 import { useRows } from "../hooks/useRows.js";
-import { currentMonth, dayKey, monthCells, monthFromSheetName } from "../dates.js";
+import { currentMonth, dayKey, monthCells, monthFromKey, monthKey, MONTH_LABEL } from "../dates.js";
 import { fmtShort, fmtTotal, level } from "../format.js";
-import { resolveSheet } from "../sheet.js";
+import { resolveMonth } from "../month.js";
 import { Sheet } from "../components/ui/sheet";
 import { AreaIcon } from "../components/AreaIcon";
 import { AREA_COLOR } from "./entry-form/presets.js";
@@ -17,10 +17,8 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Select, SelectContent, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Bars } from "../components/Bars";
 import { Pie } from "../components/Pie";
-import { Check, Pencil, Trash2 } from "lucide-preact";
+import { Pencil, Trash2 } from "lucide-preact";
 
 /* Rampa shadcn: chart-2 (verde) en pasos de opacidad sobre muted */
 const LEVEL_BG = [
@@ -48,11 +46,11 @@ function exposedCorners(pos, hasDay) {
   ].filter(Boolean).join(" ");
 }
 
-export function Graph({ names, onEdit, vista = "grilla" }) {
+export function Graph({ months, onEdit, vista = "grilla" }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
-  const [sheetKey, setSheetKey] = useState(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [daySelKey, setDaySelKey] = useState(null);
+  const [dayOpen, setDayOpen] = useState(false);
   const [drawerArea, setDrawerArea] = useState(null);
   const [shownArea, setShownArea] = useState(null);
 
@@ -71,14 +69,12 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const list = names || [];
-  const sheet = resolveSheet(search, list);
-  const { rows: apiRows, live, error, retry } = useRows(sheet);
-  // Hojas mixtas: un solo gráfico combinado; el drawer separa por área.
+  const month = resolveMonth(search);
+  const { rows: apiRows, live, error, retry } = useRows(month);
 
   function editRow(r) {
     setRowError("");
-    onEdit?.({ sheet, row: r.row, key: r.key, area: r.area || "ingles", secs: r.secs, habilidad: r.habilidad, recurso: r.recurso, titulo: r.titulo, url: r.url, notas: r.notas });
+    onEdit?.({ row: r.row, key: r.key, area: r.area || "ingles", secs: r.secs, habilidad: r.habilidad, recurso: r.recurso, titulo: r.titulo, url: r.url, notas: r.notas });
   }
 
   function askDelete(r) {
@@ -92,7 +88,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     setDeleting(true);
     setRowError("");
     try {
-      await deleteRowApi(sheet, r.row);
+      await deleteRowApi(r.row);
       setPendingDelete(null);
       window.dispatchEvent(new Event("tt:rows"));
     } catch {
@@ -103,17 +99,16 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     }
   }
 
-  // URL predecible: si no hay ?sheet= o apunta a una hoja que no existe,
-  // se fija al resuelto. Solo en "/" — si la vista está saliendo, no secuestrar.
+  // URL predecible: si no hay ?month= se fija al mes resuelto. Solo en "/"
+  // — si la vista está saliendo, no secuestrar.
   useEffect(() => {
-    if (path !== "/" || names === null) return;
-    const params = new URLSearchParams(search || "");
-    const param = params.get("sheet");
-    if ((!param || (param !== sheet && !localSheets().includes(param))) && sheet) {
-      saveLastSheet(sheet);
-      navigate(`/?sheet=${encodeURIComponent(sheet)}`, { replace: true });
+    if (path !== "/" || !month) return;
+    const param = new URLSearchParams(search || "").get("month");
+    if (!/^\d{4}-\d{2}$/.test(param || "")) {
+      navigate(`/?month=${encodeURIComponent(month)}`, { replace: true });
     }
-  }, [path, names, sheet, search ]);
+  }, [path, month, search]);
+
 
   // Totales por mes para el pie, con filtro por área (null = todas).
   // Lazy: solo se pide al abrir la vista pastel o cambiar el filtro.
@@ -132,8 +127,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     };
   }, [vista, pieArea]);
 
-  // Mes a mostrar: lo define la hoja ("Inglés - 2026 Octubre"); las filas
-  // solo son fallback para hojas con nombre libre, y el dispositivo si no hay.
+  // Mes a mostrar: la grilla se construye del mes activo, no de las filas.
   const now = currentMonth();
   // Skeleton con la forma del mes actual del dispositivo.
   const skelCells = monthCells(now.y, now.m);
@@ -143,69 +137,9 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
     skelLast = i;
   });
   const skelHas = (p) => skelCells[p] !== null;
-  let y = now.y, m = now.m;
-  const fromName = monthFromSheetName(sheet);
-  if (fromName) {
-    y = fromName.y;
-    m = fromName.m;
-  } else if (apiRows && apiRows.length > 0) {
-    const months = [...new Set(apiRows.map((r) => r.key?.slice(0, 7)).filter(Boolean))].sort();
-    const latest = months[months.length - 1];
-    if (latest) {
-      y = Number(latest.slice(0, 4));
-      m = Number(latest.slice(5, 7));
-    }
-  }
-  const prefix = `${y}-${String(m).padStart(2, "0")}`;
-
-  // Comparar hojas (cada hoja ≈ un mes): hasta 2, con checkboxes.
-  // Sin elección: la hoja en pantalla.
-  const [picked, setPicked] = useState([]);
-  const cmp = picked.length > 0 ? picked.slice(-2) : [sheet];
-
-  function toggleMonth(name) {
-    setPicked((cur) => cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name].slice(-2));
-  }
-
-  // Filas de las comparadas que no están en pantalla (2 hooks fijos).
-  const otherA = cmp[0] && cmp[0] !== sheet ? cmp[0] : null;
-  const otherB = cmp[1] && cmp[1] !== sheet ? cmp[1] : null;
-  const rowsA = useRows(otherA);
-  const rowsB = useRows(otherB);
-
-  function rowsFor(name) {
-    if (name === sheet) return apiRows;
-    if (name === otherA) return rowsA.rows;
-    if (name === otherB) return rowsB.rows;
-    return [];
-  }
-
-  function latestPrefix(all) {
-    const months = [...new Set((all || []).map((r) => r.key?.slice(0, 7)).filter(Boolean))].sort();
-    return months[months.length - 1] || "";
-  }
-
-  const seriesLoading = cmp.some((name) => rowsFor(name) === null);
-  const series = cmp.map((name, idx) => {
-    const all = rowsFor(name) || [];
-    // Cada serie muestra el mes de su hoja; fallback al último mes con filas.
-    const named = monthFromSheetName(name);
-    const p = named
-      ? `${String(named.y).padStart(4, "0")}-${String(named.m).padStart(2, "0")}`
-      : latestPrefix(all);
-    const dm = new Map();
-    for (const r of all) {
-      if (p && r.key?.slice(0, 7) !== p) continue;
-      const d = Number(r.key.slice(8, 10));
-      dm.set(d, (dm.get(d) || 0) + r.secs);
-    }
-    const n = p ? new Date(Number(p.slice(0, 4)), Number(p.slice(5, 7)), 0).getDate() : 30;
-    return {
-      label: name,
-      color: idx === 0 ? "var(--color-chart-2)" : "var(--color-chart-4)",
-      days: Array.from({ length: n }, (_, i) => ({ day: i + 1, total: dm.get(i + 1) || 0 })),
-    };
-  });
+  const mv = monthFromKey(month) || now;
+  const y = mv.y, m = mv.m;
+  const prefix = monthKey(y, m);
 
   const dayInfo = new Map();
   for (const r of apiRows || []) {
@@ -251,21 +185,21 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
   const monthTcls = monthLv === 0 ? "text-muted-foreground" : monthLv >= 3 ? "text-background" : "text-foreground";
 
   function openDay(key) {
-    setSheetKey(key);
-    setSheetOpen(true);
+    setDaySelKey(key);
+    setDayOpen(true);
     setDrawerArea(null);
     setShownArea(null);
   }
 
-  const sel = sheetKey ? dayInfo.get(sheetKey) : null;
-  const selDate = sheetKey ? new Date(y, m - 1, Number(sheetKey.slice(8, 10))) : null;
-  const queued = sheet ? pendingCount(sheet) : 0;
+  const sel = daySelKey ? dayInfo.get(daySelKey) : null;
+  const selDate = daySelKey ? new Date(y, m - 1, Number(daySelKey.slice(8, 10))) : null;
+  const queued = month ? pendingCount(month) : 0;
 
   return (
     <div>
       <div class="mb-4">
-        {list.length === 0 && !sheet && apiRows !== null && (
-          <p class="text-sm text-muted-foreground">No hay hojas. Creá una desde el selector.</p>
+        {apiRows !== null && live && (months || []).length === 0 && (
+          <p class="text-sm text-muted-foreground">Sin meses con datos todavía. Registrá tu primera entrada.</p>
         )}
         {apiRows !== null && !live && (
           <button
@@ -278,34 +212,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
         )}
       </div>
 
-      {vista === "barras" && list.length > 1 && (
-        <div class="mb-3">
-          <Select value="">
-            <SelectTrigger class="h-9 w-full gap-2 rounded-full border-0 bg-muted px-3 text-[13px] font-medium shadow-none focus-visible:ring-2 [&_[data-slot=select-value]]:min-w-0">
-              <SelectValue>{cmp.join(" vs ")}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {list.map((n) => {
-                const on = cmp.includes(n);
-                return (
-                  <div
-                    key={n}
-                    onClick={() => toggleMonth(n)}
-                    class="flex cursor-default select-none items-center gap-2.5 rounded-sm px-2 py-2.5 text-[15px]"
-                  >
-                    <span class={`flex size-4 shrink-0 items-center justify-center rounded border ${on ? "border-chart-2 bg-chart-2" : "border-muted-foreground"}`}>
-                      {on && <Check class="size-3 text-background" />}
-                    </span>
-                    <span class="min-w-0 flex-1 truncate">{n}</span>
-                  </div>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {vista !== "tabla" && vista !== "pastel" && (vista === "grilla" ? (
+      {vista !== "tabla" && vista !== "pastel" && (
       <>
       <div key="grilla-wrap" class="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 md:flex md:items-start md:gap-6">
       <div key="grilla" class="grid flex-1 grid-cols-7 gap-0 -mx-2 sm:-mx-4 md:mx-0">
@@ -494,13 +401,7 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
       </aside>
       </div>
       </>
-      ) : seriesLoading ? (
-        <div key="barras-loading" aria-hidden="true" class="h-[240px] animate-pulse rounded-md bg-muted" />
-      ) : (
-        <div key="barras" class="relative left-1/2 w-[94vw] -translate-x-1/2 animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
-          <Bars series={series} />
-        </div>
-      ))}
+      )}
 
       {vista === "pastel" && (
         <div key="pastel" class="animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
@@ -572,14 +473,14 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
             </tbody>
           </table>
         ) : (
-          <p class="px-4 py-3 text-sm text-muted-foreground">Sin registros en esta hoja.</p>
+          <p class="px-4 py-3 text-sm text-muted-foreground">Sin registros este mes.</p>
         )}
       </div>
       )}
 
       <Sheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        open={dayOpen}
+        onOpenChange={setDayOpen}
         label={selDate ? `Actividades del ${selDate.getDate()}` : "Actividades del día"}
       >
         {selDate && (
@@ -674,10 +575,10 @@ export function Graph({ names, onEdit, vista = "grilla" }) {
                             </span>
                             {e.row ? (
                               <DropdownMenu label={`Opciones de ${e.titulo}`}>
-                                <DropdownMenuItem onClick={() => { setSheetOpen(false); editRow(e); }}>
+                                <DropdownMenuItem onClick={() => { setDayOpen(false); editRow(e); }}>
                                   <Pencil class="size-5" /> Editar
                                 </DropdownMenuItem>
-                                <DropdownMenuItem destructive onClick={() => { setSheetOpen(false); askDelete(e); }}>
+                                <DropdownMenuItem destructive onClick={() => { setDayOpen(false); askDelete(e); }}>
                                   <Trash2 class="size-5" /> Eliminar
                                 </DropdownMenuItem>
                               </DropdownMenu>

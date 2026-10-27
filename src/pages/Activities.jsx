@@ -168,9 +168,9 @@ function Group({ area, kind, title, rows, refresh }) {
   );
 }
 
-export function Activities({ sheet }) {
+export function Activities({ month }) {
   const [, setTick] = useState(0);
-  const { rows } = useRows(sheet);
+  const { rows } = useRows(month);
   const refresh = () => setTick((t) => t + 1);
 
   return (

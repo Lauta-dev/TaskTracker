@@ -1,12 +1,12 @@
-CREATE TABLE IF NOT EXISTS sheets (
-	id integer primary key autoincrement,
-  name text
-);
+-- D1: una sola tabla de datos. El mes/año viven en cada entry (year, month),
+-- derivados de "date" por el servidor; ya no hay hojas (sheets) ni sheet_id.
+-- Aplicar en DB nueva: wrangler d1 execute DB --file=./schema.sql [--remote]
 
 CREATE TABLE IF NOT EXISTS entries (
 	"id" INTEGER PRIMARY KEY AUTOINCREMENT,
-  sheet_id INTEGER NOT NULL REFERENCES sheets(id),
   "date" TEXT NOT NULL,
+  "year" INTEGER NOT NULL,
+  "month" INTEGER NOT NULL, -- 1..12
   "type" TEXT NOT NULL,
   "source" TEXT NOT NULL,
   "content" TEXT NOT NULL,
@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS entries (
   "url" TEXT NOT NULL,
   "area" TEXT NOT NULL DEFAULT 'ingles'
 );
-CREATE INDEX IF NOT EXISTS idx_entries_sheet ON entries(sheet_id);
+CREATE INDEX IF NOT EXISTS idx_entries_month ON entries(year, month);
 
--- Auth: un solo user (username + hash PBKDF2) y sesiones opacas revocables.
+-- Auth: un solo user (username + hash) y sesiones opacas revocables.
 -- La sesión viaja en cookie HttpOnly: el JS nunca ve el token.
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
