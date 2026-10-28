@@ -646,14 +646,6 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
       >
         {selDate && (
           <div class="pb-4">
-            <button
-              type="button"
-              onClick={() => setDayOpen(false)}
-              aria-label="Cerrar"
-              class="mb-1 ml-auto hidden size-9 items-center justify-center rounded-full text-muted-foreground active:bg-muted min-[840px]:flex"
-            >
-              <X class="size-5" />
-            </button>
 
             <div class="flex items-end justify-between gap-3">
               <div class="min-w-0">
