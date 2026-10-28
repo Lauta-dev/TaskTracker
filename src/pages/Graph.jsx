@@ -1,15 +1,14 @@
-import { useEffect, useState } from "preact/hooks";
-import { Fragment } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useLocation, useSearch } from "wouter";
-import { BookOpen, ChevronLeft, ChevronRight, Dumbbell, Sigma } from "lucide-preact";
-import { deleteRowApi, getMonthlyTotals, getRows, pendingCount, AREAS, AREA_LABEL } from "../api.js";
-import { useRows } from "../hooks/useRows.js";
-import { addDays, currentMonth, dayKey, monthCells, monthFromKey, monthKey, MONTH_LABEL } from "../dates.js";
-import { fmtShort, fmtTotal, level } from "../format.js";
+import { Pencil, Plus, Trash2, X } from "lucide-preact";
+import { deleteRowApi, getMonthlyTotals, pendingCount, AREAS, AREA_LABEL } from "../api.js";
+import { useRows, cachedRows, prefetchRows } from "../hooks/useRows.js";
+import { currentMonth, dayKey, monthCells, monthFromKey, monthKey, MONTH_LABEL } from "../dates.js";
+import { fmtTotal } from "../format.js";
 import { resolveMonth } from "../month.js";
 import { Sheet } from "../components/ui/sheet";
 import { AreaIcon } from "../components/AreaIcon";
-import { AREA_COLOR } from "./entry-form/presets.js";
+import { AREA_TILE } from "./entry-form/presets.js";
 import { DropdownMenu, DropdownMenuItem } from "../components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -20,70 +19,222 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { Pie } from "../components/Pie";
-import { Pencil, Trash2 } from "lucide-preact";
 
-/* Rampa shadcn: chart-2 con opacidad sobre el fondo oscuro.
-   lv 0 = día sin registro. */
-const LEVEL_BG = [
-  "bg-muted",
-  "bg-chart-2/25",
-  "bg-chart-2/50",
-  "bg-chart-2/75",
-  "bg-chart-2",
-];
-
-/* Leyenda: 0 · <20 min · 20-39 · 40-59 · 60+. */
 const WDS = ["L", "M", "X", "J", "V", "S", "D"];
 
-/* Íconos por área para el card "Por área". */
-const AREA_ICON = {
-  ingles: BookOpen,
-  matematica: Sigma,
-  ejercicio: Dumbbell,
+/* Rampas por área (0 = sin registro, 4 = 45+ min). Mismo lenguaje que el
+   diseño: verde para Inglés, ámbar para Ejercicio, azul para Matemática. */
+/* Rampa por defecto (sin filtro de área): violeta, el acento firma. */
+const RAMP_DEFECTO = ["#151515", "#241c4f", "#3d2f8f", "#7052d6", "#a78bfa"];
+const RAMPS = {
+  ingles: ["#151515", "#0f3d27", "#14633c", "#1f9d5c", "#3ddc84"],
+  ejercicio: ["#151515", "#4a2a0c", "#8a4d14", "#cc7a1f", "#ffb366"],
+  matematica: ["#151515", "#12304f", "#1b4f85", "#3a89dd", "#7db4ff"],
 };
+const LEVEL_FG = ["#c9c9c9", "#e6e0fa", "#efeafd", "#04140b", "#04140b"];
 
-/* Esquinas expuestas: redondea donde la celda no tiene día vecino
-   (ni en vertical ni al costado). `hasDay(pos)` dice si esa posición
-   de la grilla de 7 columnas tiene día. */
-function exposedCorners(pos, hasDay) {
-  const col = pos % 7;
-  const above = pos >= 7 && hasDay(pos - 7);
-  const below = hasDay(pos + 7);
-  const left = col > 0 && hasDay(pos - 1);
-  const right = col < 6 && hasDay(pos + 1);
-  return [
-    !above && !left && "rounded-tl-md",
-    !above && !right && "rounded-tr-md",
-    !below && !left && "rounded-bl-md",
-    !below && !right && "rounded-br-md",
-  ].filter(Boolean).join(" ");
+/* Minutos del día -> nivel 0..4 (0 · ≤15 · ≤30 · ≤45 · 45+). */
+function lvlMin(min) {
+  if (!(min > 0)) return 0;
+  if (min <= 15) return 1;
+  if (min <= 30) return 2;
+  if (min <= 45) return 3;
+  return 4;
 }
 
-export function Graph({ onEdit, vista = "grilla" }) {
+function Kpi({ value, label }) {
+  return (
+    <div class="rounded-xl bg-muted px-3 py-2">
+      <b class="font-data block text-[15px] font-semibold leading-5 min-[840px]:text-[18px]">{value}</b>
+      <span class="mt-0.5 block text-[11px] leading-tight text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+/* Semanas de un mes. Se usa tanto para el mes activo como para las vistas
+   previas/siguientes del carrusel. */
+function MonthGrid({ month, rows, areaSel, today, selectedKey, onDayClick, active }) {
+  const mv = monthFromKey(month) || currentMonth();
+  const { y, m } = mv;
+  const prefix = monthKey(y, m);
+
+  const cells = monthCells(y, m);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  const dayInfo = new Map();
+  for (const r of rows || []) {
+    if (!r.key?.startsWith(prefix)) continue;
+    if (!dayInfo.has(r.key)) {
+      dayInfo.set(r.key, { total: 0, entries: [], byArea: { ingles: 0, ejercicio: 0, matematica: 0 } });
+    }
+    const info = dayInfo.get(r.key);
+    info.total += r.secs;
+    const a = r.area || "ingles";
+    if (info.byArea[a] === undefined) info.byArea[a] = 0;
+    info.byArea[a] += r.secs;
+    info.entries.push(r);
+  }
+
+  const secsOf = (info) => (areaSel ? info?.byArea?.[areaSel] || 0 : info?.total || 0);
+  const weekTotal = (row) => row.reduce((acc, c) => acc + (c ? secsOf(dayInfo.get(c.key)) : 0), 0);
+  const loading = rows === null && active;
+  const isCurrent = prefix === today.slice(0, 7);
+  const ramp = RAMPS[areaSel] || RAMP_DEFECTO;
+
+  return (
+    <div class="flex flex-col gap-[5px] min-[840px]:gap-2">
+      {weeks.map((row, wi) => (
+        <div
+          key={"w" + wi}
+          class="grid grid-cols-7 gap-[5px] min-[840px]:grid-cols-[repeat(7,minmax(0,1fr))_76px] min-[840px]:gap-2"
+        >
+          {row.map((c, ci) => {
+            if (!c) return <div key={"x" + wi + "-" + ci} aria-hidden="true" />;
+            if (loading) {
+              return (
+                <div
+                  key={"s" + c.key}
+                  aria-hidden="true"
+                  class="aspect-square animate-pulse rounded-lg min-[840px]:rounded-xl bg-muted"
+                />
+              );
+            }
+            if (c.outside) {
+              return (
+                <div
+                  key={c.key}
+                  aria-hidden="true"
+                  style={{ background: ramp[0] }}
+                  class="relative flex aspect-square flex-col items-start justify-between rounded-lg p-[5px] text-left text-[11px] leading-none text-muted-foreground opacity-[.45] min-[840px]:rounded-xl min-[840px]:p-3 min-[840px]:text-[15px]"
+                >
+                  <span>{c.day}</span>
+                </div>
+              );
+            }
+            const info = dayInfo.get(c.key);
+            const secs = secsOf(info);
+            const lv = lvlMin(secs / 60);
+            const isFuture = isCurrent && c.key > today;
+            const isToday = c.key === today;
+            const isSel = active && selectedKey === c.key;
+            const hasData = secs > 0;
+            return (
+              <button
+                type="button"
+                key={c.key}
+                disabled={!hasData}
+                tabIndex={active ? 0 : -1}
+                onClick={() => onDayClick?.(c.key)}
+                title={`${c.day}: ${hasData ? fmtTotal(secs) : "sin registro"}`}
+                style={{ background: ramp[lv], color: LEVEL_FG[lv] }}
+                class={`relative flex aspect-square flex-col items-start justify-between rounded-lg p-[5px] text-left text-[11px] leading-none min-[840px]:rounded-xl min-[840px]:p-3 min-[840px]:text-[15px] ${
+                  isFuture ? "pointer-events-none" : ""
+                } ${hasData ? "cursor-pointer" : "pointer-events-none cursor-default"} ${
+                  isSel ? "shadow-[inset_0_0_0_3px_var(--color-chart-2)]" : ""
+                }`}
+              >
+                {isToday ? (
+                  /* El nro no se mueve: placeholder invisible + banderín encima. */
+                  <span aria-hidden="true" class="invisible">
+                    {c.day}
+                  </span>
+                ) : (
+                  <span>{c.day}</span>
+                )}
+                <small class="hidden text-[12px] font-medium opacity-85 min-[840px]:block">
+                  {hasData ? fmtTotal(secs) : ""}
+                </small>
+                {isToday && (
+                  <span
+                    aria-hidden="true"
+                    class="absolute left-0 top-0 rounded-tl-lg rounded-br-lg border-b border-r border-chart-2 bg-chart-2 p-[5px] min-[840px]:rounded-tl-xl min-[840px]:rounded-br-2xl min-[840px]:p-3"
+                  >
+                    <span class="block font-data text-[11px] font-bold leading-none text-[#04140b] min-[840px]:text-[15px]">
+                      {c.day}
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          <div class="font-data hidden items-center justify-end pr-2 text-[12px] font-medium whitespace-nowrap text-muted-foreground tabular-nums min-[840px]:flex">
+            {rows !== null && weekTotal(row) > 0 ? fmtTotal(weekTotal(row)) : ""}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
   const [path, navigate] = useLocation();
   const search = useSearch();
+  const [areaSel, setAreaSel] = useState(null);
   const [daySelKey, setDaySelKey] = useState(null);
   const [dayOpen, setDayOpen] = useState(false);
-  const [drawerArea, setDrawerArea] = useState(null);
-  const [shownArea, setShownArea] = useState(null);
-
-  // La lista anima al salir: se desmonta tras el animate-out (con fallback).
-  useEffect(() => {
-    if (drawerArea) {
-      setShownArea(drawerArea);
-      return;
-    }
-    if (!shownArea) return;
-    const t = setTimeout(() => setShownArea(null), 220);
-    return () => clearTimeout(t);
-  }, [drawerArea]);
-  const [monthly, setMonthly] = useState(null);
-  const [rowError, setRowError] = useState("");
+  const [sheetArea, setSheetArea] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [rowError, setRowError] = useState("");
+  const [monthly, setMonthly] = useState(null);
+  const [pieArea, setPieArea] = useState(null);
+
+  // Badge del filtro activo junto a "Resumen": entra/aparece con fade,
+  // y al quitarlo se desvanece antes de desmontarse.
+  const [areaBadge, setAreaBadge] = useState(null); // { label, dot }
+  const [areaBadgeOut, setAreaBadgeOut] = useState(false);
+  useEffect(() => {
+    if (areaSel) {
+      setAreaBadge({ label: AREA_LABEL[areaSel], dot: `var(--area-${areaSel})` });
+      setAreaBadgeOut(false);
+    } else if (areaBadge) {
+      setAreaBadgeOut(true);
+      const t = setTimeout(() => setAreaBadge(null), 150);
+      return () => clearTimeout(t);
+    }
+  }, [areaSel]);
+  // Swipe horizontal en la grilla para cambiar de mes (las flechas ya no están).
+  const swipeRef = useRef(null);
+  const swipedRef = useRef(false);
+  const clipRef = useRef(null);
+  const trackRef = useRef(null);
+  const animRef = useRef(false);
 
   const month = resolveMonth(search);
   const { rows: apiRows, live, error, retry } = useRows(month);
+  // Filas del mes visible: caché (cambio instantáneo) o las recién pedidas.
+  const rowsNow = cachedRows(month) ?? apiRows;
+
+  // Mes a mostrar: la grilla se construye del mes activo, no de las filas.
+  const now = currentMonth();
+  const mv = monthFromKey(month) || now;
+  const y = mv.y, m = mv.m;
+  const prefix = monthKey(y, m);
+  const today = dayKey(new Date());
+  const isCurrent = prefix === monthKey(now.y, now.m);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  // Días transcurridos: en el mes en curso hasta hoy; en uno cerrado, todos.
+  const elapsed = isCurrent ? Number(today.slice(8, 10)) : prefix < monthKey(now.y, now.m) ? daysInMonth : 0;
+
+  // Vecinos para el carrusel: se precargan en segundo plano.
+  const prevDate = new Date(y, m - 2, 1);
+  const nextDate = new Date(y, m, 1);
+  const prevKey = monthKey(prevDate.getFullYear(), prevDate.getMonth() + 1);
+  const nextKey = monthKey(nextDate.getFullYear(), nextDate.getMonth() + 1);
+  const [, setNeighborTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const t = window.setTimeout(() => {
+      Promise.all([prefetchRows(prevKey), prefetchRows(nextKey)]).then(() => {
+        if (alive) setNeighborTick((v) => v + 1);
+      });
+    }, 300);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [prevKey, nextKey]);
 
   function editRow(r) {
     setRowError("");
@@ -122,15 +273,13 @@ export function Graph({ onEdit, vista = "grilla" }) {
     }
   }, [path, month, search]);
 
-  // Totales por mes para el pie, con filtro por área (null = todas).
-  // Lazy: solo se pide al abrir la vista pastel o cambiar el filtro.
-  const [pieArea, setPieArea] = useState(null);
+  // Totales por mes para la vista pastel, con filtro por área.
   useEffect(() => {
     if (vista !== "pastel") return;
     let alive = true;
     setMonthly(null);
-    getMonthlyTotals(pieArea).then((m) => {
-      if (alive) setMonthly(m);
+    getMonthlyTotals(pieArea).then((mm) => {
+      if (alive) setMonthly(mm);
     }).catch(() => {
       if (alive) setMonthly([]);
     });
@@ -139,24 +288,12 @@ export function Graph({ onEdit, vista = "grilla" }) {
     };
   }, [vista, pieArea]);
 
-  // Mes a mostrar: la grilla se construye del mes activo, no de las filas.
-  const now = currentMonth();
-  // Skeleton con la forma del mes actual del dispositivo.
-  const skelCells = monthCells(now.y, now.m);
-  let skelLast = -1;
-  skelCells.forEach((c, i) => {
-    if (c === null) return;
-    skelLast = i;
-  });
-  const skelHas = (p) => skelCells[p] !== null;
-  const mv = monthFromKey(month) || now;
-  const y = mv.y, m = mv.m;
-  const prefix = monthKey(y, m);
-
   const dayInfo = new Map();
-  for (const r of apiRows || []) {
+  for (const r of rowsNow || []) {
     if (!r.key?.startsWith(prefix)) continue;
-    if (!dayInfo.has(r.key)) dayInfo.set(r.key, { total: 0, entries: [], byArea: { ingles: 0, ejercicio: 0, matematica: 0 } });
+    if (!dayInfo.has(r.key)) {
+      dayInfo.set(r.key, { total: 0, entries: [], byArea: { ingles: 0, ejercicio: 0, matematica: 0 } });
+    }
     const info = dayInfo.get(r.key);
     info.total += r.secs;
     const a = r.area || "ingles";
@@ -165,376 +302,271 @@ export function Graph({ onEdit, vista = "grilla" }) {
     info.entries.push(r);
   }
 
-  const rows = (apiRows || [])
+  const rows = (rowsNow || [])
     .filter((r) => r.key?.startsWith(prefix))
     .sort((a, b) => b.key.localeCompare(a.key));
 
-  const today = dayKey(new Date());
-  const isCurrent = prefix === monthKey(now.y, now.m);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  // "21 de 27 días": en el mes en curso cuenta hasta hoy; en un mes
-  // cerrado, completo.
-  const elapsed = isCurrent ? new Date().getDate() : daysInMonth;
-  const diasActivos = [...dayInfo.values()].filter((v) => v.total > 0).length;
-  const monthTotal = [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
-  const promedio = diasActivos > 0 ? monthTotal / diasActivos : 0;
-
-  // Racha: necesita el historial completo (rachas cruzan meses).
-  const [streak, setStreak] = useState({ cur: 0, best: 0, week: [] });
-  useEffect(() => {
-    if (!month) return;
-    let alive = true;
-    getRows(null).then((res) => {
-      if (!alive) return;
-      const t = new Map();
-      for (const r of res.rows || []) {
-        if (!r.key) continue;
-        t.set(r.key, (t.get(r.key) || 0) + r.secs);
-      }
-      const keys = [...t.keys()].sort();
-      let best = 0;
-      let run = 0;
-      let prev = "";
-      for (const k of keys) {
-        run = prev && addDays(prev, 1) === k ? run + 1 : 1;
-        if (run > best) best = run;
-        prev = k;
-      }
-      // Racha actual: hacia atrás desde hoy (hoy cuenta si tiene registro).
-      let cur = 0;
-      let day = today;
-      while (t.has(day) && t.get(day) > 0) {
-        cur++;
-        day = addDays(day, -1);
-      }
-      // Últimos 7 días para las minibarras (X..M, hoy al final).
-      const week = [];
-      for (let i = -6; i <= 0; i++) {
-        const k = addDays(today, i);
-        week.push({
-          key: k,
-          secs: t.get(k) || 0,
-          wd: new Date(Number(k.slice(0, 4)), Number(k.slice(5, 7)) - 1, Number(k.slice(8, 10)))
-            .toLocaleDateString("es", { weekday: "narrow" }).toUpperCase(),
-        });
-      }
-      setStreak({ cur, best, week });
-    }).catch(() => {
-      if (!alive) return;
-      setStreak({ cur: 0, best: 0, week: [] });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [month, today, apiRows]);
-
-  // Total de mes por área (cards + drawer).
-  function areaTotal(a) {
+  const areaTotal = (a) => {
     let t = 0;
     for (const v of dayInfo.values()) t += v.byArea?.[a] || 0;
     return t;
+  };
+  const daySecs = (info) => (areaSel ? info?.byArea?.[areaSel] || 0 : info?.total || 0);
+
+  const total = areaSel ? areaTotal(areaSel) : [...dayInfo.values()].reduce((acc, v) => acc + v.total, 0);
+  const daysActive = [...dayInfo.values()].filter((v) => daySecs(v) > 0).length;
+  const avg = daysActive > 0 ? total / daysActive : 0;
+
+  // Racha dentro del mes visible (cortada a los días transcurridos).
+  let run = 0;
+  let best = 0;
+  for (let d = 1; d <= elapsed; d++) {
+    const key = `${prefix}-${String(d).padStart(2, "0")}`;
+    if (daySecs(dayInfo.get(key)) > 0) {
+      run++;
+      if (run > best) best = run;
+    } else {
+      run = 0;
+    }
   }
 
-  // Bloque final del mes: intensidad por mínutos totales.
-  const monthLv = level(monthTotal);
-
-  // Semanas (chunks de 7 celdas) con su total; skeleton usa la misma forma.
-  const cells = monthCells(y, m).map((c) =>
-    c === null ? null : { ...c, total: dayInfo.get(c.key)?.total || 0 },
-  );
-  // Celdas vacías después del último día → total del mes.
-  let lastIdx = -1;
-  cells.forEach((c, i) => {
-    if (c === null) return;
-    lastIdx = i;
-  });
-  const hasDay = (p) => cells[p] != null;
-  const weeks = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  const weekTotals = weeks.map((row) => row.reduce((acc, c) => (c == null ? acc : acc + c.total), 0));
-  const skelWeeks = [];
-  for (let i = 0; i < skelCells.length; i += 7) skelWeeks.push(skelCells.slice(i, i + 7));
+  function toggleArea(a) {
+    setAreaSel((cur) => (cur === a ? null : a));
+  }
 
   function shiftMonth(d) {
     const dt = new Date(y, m - 1 + d, 1);
     navigate(`/?month=${monthKey(dt.getFullYear(), dt.getMonth() + 1)}`);
   }
 
+  function onGridPointerDown(e) {
+    if (animRef.current) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    swipeRef.current = { x: e.clientX, y: e.clientY, horiz: false };
+    swipedRef.current = false;
+  }
+
+  const slideWidth = () => clipRef.current?.clientWidth || 360;
+
+  /* Mueve el riel por CSS directo: sin re-renderizar el calendario en cada
+     píxel (evita el tirón al soltar en el celular). */
+  function setDx(px, animate) {
+    const t = trackRef.current;
+    if (!t) return;
+    t.style.transition = animate ? "transform 260ms cubic-bezier(.22,.61,.36,1)" : "none";
+    t.style.setProperty("--swipe-dx", `${px}px`);
+  }
+
+  function onGridPointerMove(e) {
+    const s = swipeRef.current;
+    if (!s) return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (!s.horiz) {
+      // Recién a los 10px decidimos: vertical (scroll) o horizontal (mes).
+      if (Math.abs(dx) < 10) return;
+      if (Math.abs(dx) <= Math.abs(dy)) {
+        swipeRef.current = null;
+        return;
+      }
+      s.horiz = true;
+      document.activeElement?.blur?.();
+    }
+    swipedRef.current = true;
+    const w = slideWidth();
+    setDx(Math.max(-w, Math.min(w, dx)), false);
+  }
+
+  function slideTo(dir) {
+    const w = slideWidth() + 24; // + gap entre paneles del carrusel
+    animRef.current = true;
+    // 1) el panel vecino entra completo, como un carrusel.
+    setDx(-dir * w, true);
+    window.setTimeout(() => {
+      // 2) el vecino ya está centrado: cambia el mes y reajusta el riel
+      //    sin transición (el panel que se ve es el mismo, sin salto).
+      setDx(0, false);
+      shiftMonth(dir);
+      animRef.current = false;
+    }, 270);
+  }
+
+  function onGridPointerUp(e) {
+    const s = swipeRef.current;
+    swipeRef.current = null;
+    if (!s?.horiz) return;
+    const dx = e.clientX - s.x;
+    if (Math.abs(dx) > 60) {
+      slideTo(dx < 0 ? 1 : -1);
+    } else {
+      setDx(0, true);
+    }
+  }
+
+  function onGridPointerCancel() {
+    swipeRef.current = null;
+    swipedRef.current = false;
+    setDx(0, true);
+  }
+
   function openDay(key) {
+    // El click que cierra un swipe (o la animación) no abre el día.
+    if (swipedRef.current || animRef.current) {
+      swipedRef.current = false;
+      return;
+    }
     setDaySelKey(key);
     setDayOpen(true);
-    setDrawerArea(null);
-    setShownArea(null);
+    setSheetArea(null);
   }
 
   const sel = daySelKey ? dayInfo.get(daySelKey) : null;
   const selDate = daySelKey ? new Date(y, m - 1, Number(daySelKey.slice(8, 10))) : null;
+  const selToday = daySelKey === today;
+  const selAreas = sel ? AREAS.filter((a) => (sel.byArea?.[a] || 0) > 0 || sel.entries.some((e) => (e.area || "ingles") === a)) : [];
+  const selEntries = sel ? sel.entries.filter((e) => !sheetArea || (e.area || "ingles") === sheetArea) : [];
   const queued = month ? pendingCount(month) : 0;
-  // Mayor de los últimos 7 días: escala las minibarras de racha.
-  const weekMax = Math.max(1, ...streak.week.map((d) => d.secs));
+
+  // Badges de áreas reutilizados como footer de la grilla.
+  const badges = AREAS.map((a) => (
+    <button
+      key={a}
+      type="button"
+      aria-pressed={areaSel === a}
+      onClick={() => toggleArea(a)}
+      data-active={areaSel === a || undefined}
+      class={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition-all duration-200 min-[840px]:min-h-9 min-[840px]:gap-2.5 min-[840px]:rounded-xl min-[840px]:px-2.5 min-[840px]:py-0 min-[840px]:text-[13px] ${
+        areaSel === a
+          ? "bg-secondary text-secondary-foreground"
+          : `bg-muted text-foreground min-[840px]:bg-transparent ${areaSel ? "opacity-40" : ""}`
+      }`}
+    >
+      <i class="size-2.5 shrink-0 rounded-full" style={{ background: `var(--area-${a})` }} />
+      <span class="min-w-0 flex-1 truncate text-left">{AREA_LABEL[a]}</span>
+      <em class={`font-data shrink-0 not-italic ${areaSel === a ? "" : "text-muted-foreground"}`}>
+        {fmtTotal(areaTotal(a))}
+      </em>
+    </button>
+  ));
+
+  // Carrusel: mes anterior, actual y siguiente.
+  const panelKeys = [prevKey, month, nextKey];
+  const panelRows = (key) => (key === month ? rowsNow : cachedRows(key));
 
   return (
     <div>
-      <div class="mb-4">
-        {apiRows !== null && !live && (
-          <button
-            type="button"
-            onClick={retry}
-            class="font-data mt-2 block text-left text-[11px] text-muted-foreground underline underline-offset-4"
-          >
-            Sin conexión · mostrando lo guardado{queued > 0 ? ` · ${queued} en cola` : ""} · reintentar{error ? ` (${error})` : ""}
-          </button>
-        )}
-      </div>
+      {apiRows !== null && !live && (
+        <button
+          type="button"
+          onClick={retry}
+          class="font-data mb-3 block text-left text-[11px] text-muted-foreground underline underline-offset-4"
+        >
+          Sin conexión · mostrando lo guardado{queued > 0 ? ` · ${queued} en cola` : ""} · reintentar{error ? ` (${error})` : ""}
+        </button>
+      )}
 
-      {vista !== "tabla" && vista !== "pastel" && (
-      <>
-      <div key="grilla-wrap" class="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 md:flex md:items-start md:gap-4">
-      <div key="grilla" class="min-w-0 flex-1">
-        {/* Header del heatmap: mes + resumen a la izquierda, navegación a la derecha. */}
-        <div class="mb-4 flex items-start justify-between">
-          <div>
-            <h1 class="font-display text-[24px] font-semibold capitalize leading-none tracking-tight md:text-[27px]">{MONTH_LABEL(prefix)}</h1>
-            <p class="font-data mt-1.5 text-[11px] text-muted-foreground md:text-[12px]">
-              {monthTotal > 0 ? `${fmtShort(monthTotal)} · ` : ""}{diasActivos} días activos
-            </p>
-          </div>
-          <div class="flex shrink-0 items-center rounded-full border border-border">
-            <button
-              type="button"
-              onClick={() => shiftMonth(-1)}
-              title="Mes anterior"
-              aria-label="Mes anterior"
-              class="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted md:size-10"
+      {vista === "grilla" && (
+        <div class="flex flex-col gap-8 min-[840px]:grid min-[840px]:grid-cols-[600px_minmax(0,1fr)] min-[840px]:items-start min-[840px]:gap-5">
+          <div class="min-w-0">
+            <div
+              ref={clipRef}
+              class="touch-pan-y overflow-hidden select-none"
+              onPointerDown={onGridPointerDown}
+              onPointerMove={onGridPointerMove}
+              onPointerUp={onGridPointerUp}
+              onPointerCancel={onGridPointerCancel}
             >
-              <ChevronLeft class="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => shiftMonth(1)}
-              title="Mes siguiente"
-              aria-label="Mes siguiente"
-              class="flex size-9 items-center justify-center border-l border-border rounded-r-full text-muted-foreground transition-colors active:bg-muted md:size-10"
-            >
-              <ChevronRight class="size-5" />
-            </button>
-          </div>
-        </div>
-        <div class="grid gap-0 -mx-2 sm:-mx-4 md:mx-0" style={{ gridTemplateColumns: "repeat(7, 1fr) 68px" }}>
-          {WDS.map((w) => (
-            <div key={w} class="font-data pb-1 text-center text-[12px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[13px]">
-              {w}
-            </div>
-          ))}
-          <div class="font-data pb-1 text-right text-[10px] uppercase tracking-widest text-muted-foreground md:pb-2 md:text-[11px]">Semana</div>
-          {(apiRows === null ? skelWeeks : weeks).map((row, wi) => (
-            <Fragment key={"w" + wi}>
-              {row.map((d, ci) => {
-                const i = wi * 7 + ci;
-                if (apiRows === null) {
-                  // Skeleton con la forma del mes actual del dispositivo.
-                  if (d === null) {
-                    if (i <= skelLast) return <div key={"x" + i} aria-hidden="true" />;
-                    if (i !== skelLast + 1) return <div key={"x" + i} aria-hidden="true" />;
-                    const span = skelCells.length - 1 - skelLast;
+              {/* Cabecera fija; solo se deslizan las semanas. */}
+              <div class="grid grid-cols-7 gap-[5px] min-[840px]:grid-cols-[repeat(7,minmax(0,1fr))_76px] min-[840px]:gap-2">
+                {WDS.map((w) => (
+                  <div key={w} class="font-data pb-1.5 text-center text-[11px] text-muted-foreground min-[840px]:text-xs">
+                    {w}
+                  </div>
+                ))}
+                <div class="font-data hidden pb-1.5 pr-2 text-right text-xs text-muted-foreground min-[840px]:block">Sem</div>
+              </div>
+
+              <div class="relative overflow-hidden">
+                <div
+                  ref={trackRef}
+                  class="flex gap-6 will-change-transform"
+                  style={{ transform: "translateX(calc(-100% - 24px + var(--swipe-dx, 0px)))" }}
+                >
+                  {panelKeys.map((key) => {
+                    const isActive = key === month;
                     return (
                       <div
-                        key="skel-total"
-                        aria-hidden="true"
-                        style={{ gridColumn: span > 1 ? `${(i % 7) + 2} / span ${span}` : undefined }}
-                        class="min-h-full w-full animate-pulse rounded-br-md bg-muted"
-                      />
+                        key={key}
+                        aria-hidden={!isActive}
+                        class={`w-full shrink-0 ${isActive ? "" : "pointer-events-none"}`}
+                      >
+                        <MonthGrid
+                          month={key}
+                          rows={panelRows(key)}
+                          areaSel={areaSel}
+                          today={today}
+                          selectedKey={isActive ? (dayOpen ? daySelKey : null) : null}
+                          onDayClick={isActive ? openDay : null}
+                          active={isActive}
+                        />
+                      </div>
                     );
-                  }
-                  const skelBelow = i + 7;
-                  const skelRight = i % 7 < 6 ? i + 1 : -1;
-                  const skelBelowIsTotal = skelBelow > skelLast && skelBelow < skelCells.length;
-                  const skelRightIsTotal = skelRight !== -1 && skelRight > skelLast && skelRight < skelCells.length;
-                  const skelCc = exposedCorners(i, skelHas)
-                    .split(" ")
-                    .filter((c) => {
-                      if (skelBelowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
-                      if (skelRightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
-                      return true;
-                    })
-                    .join(" ");
-                  return (
-                    <div
-                      key={"s" + i}
-                      aria-hidden="true"
-                      style={{ animationDelay: `${(i % 7) * 60}ms` }}
-                      class={`aspect-square w-full animate-pulse bg-muted ${skelCc}`}
-                    />
-                  );
-                }
-                if (d == null) {
-                  if (i <= lastIdx) return <div key={"x" + i} />;
-                  // Relleno final: un solo bloque que ocupa todos los espacios.
-                  if (i !== lastIdx + 1) return <div key={"x" + i} aria-hidden="true" />;
-                  const span = cells.length - 1 - lastIdx;
-                  return (
-                    <div
-                      key="month-total"
-                      title={`Total del mes: ${fmtTotal(monthTotal)}`}
-                      style={{ gridColumn: span > 1 ? `${(i % 7) + 2} / span ${span}` : undefined }}
-                      class={`relative min-h-full w-full overflow-hidden border border-border rounded-br-md ${LEVEL_BG[monthLv]}`}
-                    >
-                      <span class="absolute inset-0 flex items-center justify-center p-1.5">
-                        <span class="font-data text-[14px] font-bold leading-none text-foreground md:text-[17px]">
-                          {fmtShort(monthTotal)}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                }
-                const lv = level(d.total);
-                const isFuture = d.key > today && isCurrent;
-                const isToday = d.key === today;
-                const hasData = d.total > 0;
-                const done = [...new Set((dayInfo.get(d.key)?.entries || []).map((e) => e.area || "ingles"))];
-                // Empalme con el bloque del total: si abajo o a la derecha hay
-                // relleno del total (no día, pero tampoco vacío exterior), la
-                // última semana queda como una sola pieza sin muescas.
-                const belowPos = i + 7;
-                const rightPos = i % 7 < 6 ? i + 1 : -1;
-                const belowIsTotal = belowPos > lastIdx && belowPos < cells.length;
-                const rightIsTotal = rightPos !== -1 && rightPos > lastIdx && rightPos < cells.length;
-                const cc = exposedCorners(i, hasDay)
-                  .split(" ")
-                  .filter((c) => {
-                    if (belowIsTotal && (c === "rounded-bl-md" || c === "rounded-br-md")) return false;
-                    if (rightIsTotal && (c === "rounded-tr-md" || c === "rounded-br-md")) return false;
-                    return true;
-                  })
-                  .join(" ");
-                return (
-                  <button
-                    type="button"
-                    key={d.key}
-                    disabled={!hasData}
-                    onClick={() => openDay(d.key)}
-                    title={`${d.day}: ${d.total > 0 ? fmtTotal(d.total) : "sin registro"}`}
-                    class={`relative aspect-square w-full overflow-hidden border border-border text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${LEVEL_BG[lv]} ${cc} ${isFuture ? "border-dashed" : ""} ${isToday ? "after:absolute after:inset-0 after:rounded-[inherit] after:ring-2 after:ring-foreground/80" : ""} ${hasData ? "cursor-pointer" : "cursor-default"}`}
-                  >
-                    <span class="absolute inset-0 flex flex-col justify-between p-2 md:p-2.5">
-                      <span class={`font-data text-[15px] font-bold leading-none md:text-[17px] ${lv >= 4 ? "text-background" : lv > 0 ? "text-foreground" : "text-muted-foreground"}`}>
-                        {d.day}
-                      </span>
-                      {done.length > 0 && (
-                        <span class="flex gap-1">
-                          {done.map((a) => (
-                            <span
-                              key={a}
-                              title={AREA_LABEL[a]}
-                              style={{ background: AREA_COLOR[a] }}
-                              class="size-[7px] rounded-full ring-1 ring-background/50"
-                            />
-                          ))}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-              {/* Total de la semana, a la derecha (estira toda la fila). */}
-              <div class="flex min-h-full w-full flex-col items-end justify-end pb-2.5 md:pb-2">
-                <span class={`font-data text-[12px] font-semibold leading-none md:text-[13px] ${weekTotals[wi] > 0 ? "text-foreground" : "text-muted-foreground/70"}`}>
-                  {weekTotals[wi] > 0 ? fmtShort(weekTotals[wi]) : ""}
+                  })}
+                </div>
+              </div>
+            </div>
+            {rowError && <p class="mt-2 text-sm text-destructive">{rowError}</p>}
+          </div>
+
+          <aside class="min-w-0">
+            <section class="flex flex-col gap-2.5 rounded-[20px] bg-card p-4 min-[840px]:rounded-3xl min-[840px]:p-5">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-data text-[11px] uppercase tracking-[.12em] text-muted-foreground">
+                  Resumen del mes
+                </p>
+                <span
+                  aria-hidden={!areaSel}
+                  class={`font-data inline-flex min-h-4 items-center gap-1.5 rounded-full bg-muted px-2 text-[10px] uppercase tracking-[.12em] text-foreground transition-all duration-150 ${
+                    areaSel && !areaBadgeOut ? "opacity-100" : "pointer-events-none opacity-0"
+                  }`}
+                >
+                  <i class="size-1.5 shrink-0 rounded-full" style={{ background: areaBadge?.dot ?? "transparent" }} />
+                  {areaBadge?.label ?? ""}
                 </span>
               </div>
-            </Fragment>
-          ))}
-        </div>
-      </div>
-      <aside class="mt-6 space-y-3 md:mt-0 md:w-[300px] md:shrink-0">
-        {/* ESTE MES */}
-        <div class="rounded-xl border border-border bg-card p-4">
-          <p class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">Este mes</p>
-          <p class="font-display mt-1 text-[30px] font-semibold leading-none tracking-tight md:text-[34px]">
-            {apiRows === null ? <span class="inline-block h-7 w-32 animate-pulse rounded-sm bg-muted" /> : fmtTotal(monthTotal)}
-          </p>
-          {apiRows !== null && (
-            <p class="mt-2 text-[12px] text-muted-foreground md:text-[13px]">
-              {diasActivos} de {elapsed} días con registro
-              {promedio > 0 ? <> · promedio {fmtShort(promedio)} por día activo</> : null}
-            </p>
-          )}
-        </div>
-        {/* RACHA */}
-        <div class="rounded-xl border border-border bg-card p-4">
-          <div class="flex gap-6">
-            <div>
-              <p class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">Racha actual</p>
-              <p class="font-display mt-1 text-[22px] font-semibold leading-none md:text-[24px]">{streak.cur} días</p>
-            </div>
-            <div>
-              <p class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">Mejor</p>
-              <p class="font-display mt-1 text-[22px] font-semibold leading-none text-muted-foreground md:text-[24px]">{streak.best} días</p>
-            </div>
-          </div>
-          {/* Minibarras: Últimos 7 días (X..M). */}
-          <div aria-hidden="true" class="mt-3 flex h-12 items-end gap-1.5">
-            {streak.week.map((d) => (
-              <div
-                key={d.key}
-                title={`${d.key}: ${fmtTotal(d.secs)}`}
-                style={{ height: `${d.secs > 0 ? Math.max(12, (d.secs / weekMax) * 100) : 6}%` }}
-                class={`min-h-[4px] flex-1 rounded-[4px] ${d.secs > 0 ? "bg-chart-2" : "bg-muted"}`}
-              />
-            ))}
-          </div>
-          <div class="mt-1 flex gap-1.5">
-            {streak.week.map((d) => (
-              <span key={d.key} class="font-data flex-1 text-center text-[9px] text-muted-foreground">{d.wd}</span>
-            ))}
-          </div>
-        </div>
-        {/* POR ÁREA */}
-        <div class="rounded-xl border border-border bg-card p-4">
-          <p class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">Por área</p>
-          {monthTotal > 0 ? (
-            <>
-              <div class="mt-3 flex h-2.5 gap-[3px]" role="img" aria-label={`Reparto del mes: ${AREAS.filter((a) => areaTotal(a) > 0).map((a) => `${AREA_LABEL[a]} ${fmtTotal(areaTotal(a))}`).join(", ")}`}>
-                {(() => {
-                  const vis = AREAS.filter((a) => (areaTotal(a)) > 0);
-                  return vis.map((a, i) => (
-                    <div
-                      key={a}
-                      title={`${AREA_LABEL[a]}: ${fmtTotal(areaTotal(a))}`}
-                      style={{ width: `${(areaTotal(a) / monthTotal) * 100}%`, background: AREA_COLOR[a] }}
-                      class={`h-full ${i === 0 ? "rounded-l-full" : ""} ${i === vis.length - 1 ? "rounded-r-full" : ""}`}
-                    />
-                  ));
-                })()}
+              <p class="font-display text-[30px] font-semibold leading-[34px] tracking-tight min-[840px]:text-[40px] min-[840px]:leading-[44px]">
+                {apiRows === null ? (
+                  <span class="inline-block h-8 w-32 animate-pulse rounded bg-muted align-middle" />
+                ) : (
+                  fmtTotal(total)
+                )}
+                <span class="ml-2 font-sans text-xs font-normal tracking-normal text-muted-foreground">registradas</span>
+              </p>
+              <div class="grid grid-cols-2 gap-1.5">
+                <Kpi value={`${run} días`} label="Racha actual" />
+                <Kpi value={`${best} días`} label="Mejor racha" />
+                <Kpi value={`${daysActive} / ${elapsed}`} label="Días activos" />
+                <Kpi value={daysActive ? fmtTotal(avg) : "—"} label="Promedio por día activo" />
               </div>
-              <ul class="mt-3 space-y-1.5">
-                {AREAS.map((a) => {
-                  const v = areaTotal(a);
-                  if (!(v > 0)) return null;
-                  const Icon = AREA_ICON[a];
-                  return (
-                    <li key={a} class="flex items-center gap-2 text-[14px]">
-                      <Icon class="size-4 shrink-0" style={{ color: AREA_COLOR[a] }} />
-                      <span class="min-w-0 flex-1 truncate">{AREA_LABEL[a]}</span>
-                      <span class="font-data shrink-0 text-[13px] font-semibold">{fmtTotal(v)}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          ) : (
-            <p class="text-sm text-muted-foreground mt-2">Sin datos este mes.</p>
-          )}
+
+              {/* Footer de la card: filtros por área. */}
+              {AREAS.length > 0 && (
+                <>
+                  <hr class="border-border" />
+                  <div class={`flex w-full flex-wrap gap-1.5 min-[840px]:flex-col min-[840px]:flex-nowrap min-[840px]:gap-0.5`}>
+                    {badges}
+                  </div>
+                </>
+              )}
+            </section>
+          </aside>
         </div>
-      </aside>
-      </div>
-      </>
       )}
 
       {vista === "pastel" && (
         <div key="pastel" class="animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
           {monthly === null ? (
-            <div aria-hidden="true" class="rounded-md border border-border bg-card px-4 py-4">
+            <div aria-hidden="true" class="rounded-2xl bg-card px-4 py-4">
               <div class="mx-auto size-[220px] animate-pulse rounded-full bg-muted" />
               <div class="mt-3 space-y-1">
                 {[0, 1, 2].map((i) => (
@@ -549,61 +581,62 @@ export function Graph({ onEdit, vista = "grilla" }) {
       )}
 
       {vista === "tabla" && (
-      <div key="tabla" class="mt-6 overflow-hidden rounded-md border border-border animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
-        {rowError && <p class="border-b border-border px-4 py-2 text-sm text-destructive">{rowError}</p>}
-        {apiRows === null ? (
-          <div class="space-y-2 p-3" aria-hidden="true">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={"t" + i} class="h-12 animate-pulse rounded-md bg-muted" />
-            ))}
-          </div>
-        ) : rows.length > 0 ? (
-          <table class="w-full table-fixed text-left text-[13px] md:text-[15px]">
-            <thead>
-                <tr class="bg-muted font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">
-                <th class="w-10 px-3 py-2 font-medium">Día</th>
-                <th class="px-3 py-2 font-medium">Actividad</th>
-                <th class="w-20 px-3 py-2 text-right font-medium">Tiempo</th>
-                <th class="w-[60px] px-2 py-2"></th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              {rows.map((r, i) => (
-                <tr key={r.key + "-" + i}>
-                  <td class="whitespace-nowrap px-3 py-2 font-data text-muted-foreground">{r.key.slice(8, 10)}</td>
-                  <td class="px-3 py-2">
-                    <p class="font-medium leading-snug">
-                      {r.url ? (
-                        <a href={r.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
-                          {r.titulo}
-                        </a>
-                      ) : r.titulo}
-                    </p>
-                    <p class="font-data text-[11px] text-muted-foreground md:text-[12px]">{r.recurso && r.recurso !== "—" ? `${r.habilidad} · ${r.recurso}` : r.habilidad}</p>
-                  </td>
-                  <td class="whitespace-nowrap px-3 py-2 text-right font-data font-semibold">
-                    {r.secs > 0 ? fmtTotal(r.secs) : "—"}
-                  </td>
-                  <td class="whitespace-nowrap py-2 pl-4 pr-2 text-right">
-                    {r.row ? (
-                      <DropdownMenu label={`Opciones de ${r.titulo}`}>
-                        <DropdownMenuItem onClick={() => editRow(r)}>
-                          <Pencil class="size-5" /> Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem destructive onClick={() => askDelete(r)}>
-                          <Trash2 class="size-5" /> Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenu>
-                    ) : null}
-                  </td>
-                </tr>
+        <div key="tabla" class="overflow-hidden rounded-2xl bg-card animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+          {apiRows === null ? (
+            <div class="space-y-2 p-3" aria-hidden="true">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={"t" + i} class="h-12 animate-pulse rounded-md bg-muted" />
               ))}
-            </tbody>
-          </table>
-        ) : (
-          <p class="px-4 py-3 text-sm text-muted-foreground">Sin registros este mes.</p>
-        )}
-      </div>
+            </div>
+          ) : rows.length > 0 ? (
+            <table class="w-full table-fixed text-left text-[13px] md:text-[15px]">
+              <thead>
+                <tr class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">
+                  <th class="w-10 px-3 py-2 font-medium">Día</th>
+                  <th class="px-3 py-2 font-medium">Actividad</th>
+                  <th class="w-20 px-3 py-2 text-right font-medium">Tiempo</th>
+                  <th class="w-[60px] px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {rows.map((r, i) => (
+                  <tr key={r.key + "-" + i}>
+                    <td class="whitespace-nowrap px-3 py-2 font-data text-muted-foreground">{r.key.slice(8, 10)}</td>
+                    <td class="px-3 py-2">
+                      <p class="font-medium leading-snug">
+                        {r.url ? (
+                          <a href={r.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
+                            {r.titulo}
+                          </a>
+                        ) : r.titulo}
+                      </p>
+                      <p class="font-data text-[11px] text-muted-foreground md:text-[12px]">
+                        {r.recurso && r.recurso !== "—" ? `${r.habilidad} · ${r.recurso}` : r.habilidad}
+                      </p>
+                    </td>
+                    <td class="whitespace-nowrap px-3 py-2 text-right font-data font-semibold">
+                      {r.secs > 0 ? fmtTotal(r.secs) : "—"}
+                    </td>
+                    <td class="whitespace-nowrap py-2 pl-4 pr-2 text-right">
+                      {r.row ? (
+                        <DropdownMenu label={`Opciones de ${r.titulo}`}>
+                          <DropdownMenuItem onClick={() => editRow(r)}>
+                            <Pencil class="size-5" /> Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem destructive onClick={() => askDelete(r)}>
+                            <Trash2 class="size-5" /> Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenu>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p class="px-4 py-3 text-sm text-muted-foreground">Sin registros este mes.</p>
+          )}
+        </div>
       )}
 
       <Sheet
@@ -612,119 +645,127 @@ export function Graph({ onEdit, vista = "grilla" }) {
         label={selDate ? `Actividades del ${selDate.getDate()}` : "Actividades del día"}
       >
         {selDate && (
-          <div>
-            <div class="px-1">
-              <p class="font-data text-[10px] uppercase tracking-widest text-muted-foreground">
-                Detalle del día
-              </p>
-              <div class="mt-1 flex items-baseline justify-between gap-2">
-                <p class="text-[16px] font-semibold md:text-[18px]">
+          <div class="pb-4">
+            <button
+              type="button"
+              onClick={() => setDayOpen(false)}
+              aria-label="Cerrar"
+              class="mb-1 ml-auto hidden size-9 items-center justify-center rounded-full text-muted-foreground active:bg-muted min-[840px]:flex"
+            >
+              <X class="size-5" />
+            </button>
+
+            <div class="flex items-end justify-between gap-3">
+              <div class="min-w-0">
+                <h2 class="font-display text-[22px] font-semibold leading-7 tracking-tight">
                   {(() => {
                     const s = selDate.toLocaleDateString("es", { weekday: "long", day: "numeric" }).replace(",", "");
                     return s.charAt(0).toUpperCase() + s.slice(1);
                   })()}
-                </p>
-                <p class="font-data text-[16px] font-bold md:text-[18px]">
-                  {sel && sel.total > 0 ? fmtTotal(sel.total) : "0m"}
+                </h2>
+                <p class="text-sm text-muted-foreground">
+                  {MONTH_LABEL(prefix)}
+                  {selToday ? " · hoy" : ""}
                 </p>
               </div>
-              {sel && sel.entries.length > 0 && (
-                <div class="mt-3 flex gap-2">
-                  {AREAS.map((a) => {
-                    const items = sel.entries.filter((e) => (e.area || "ingles") === a);
-                    if (items.length === 0) return null;
+              <div class="shrink-0 text-right">
+                <b class="font-data block text-[22px] font-semibold leading-7">{sel ? fmtTotal(sel.total) : "0m"}</b>
+                <p class="text-xs text-muted-foreground">total del día</p>
+              </div>
+            </div>
+
+            {sel && sel.total > 0 && (
+              <>
+                <div class="mt-3 grid grid-cols-3 gap-2">
+                  {selAreas.map((a) => {
                     const v = sel.byArea?.[a] || 0;
-                    const active = drawerArea === a;
+                    const n = sel.entries.filter((e) => (e.area || "ingles") === a).length;
+                    const on = sheetArea === a;
                     return (
                       <button
                         key={a}
                         type="button"
-                        onClick={() => setDrawerArea(active ? null : a)}
-                        aria-pressed={active}
-                        aria-expanded={active}
-                        style={active ? { boxShadow: `0 0 0 2px ${AREA_COLOR[a]}` } : undefined}
-                        class="min-w-0 flex-1 rounded-xl bg-muted px-3 py-2 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-pressed={on}
+                        onClick={() => setSheetArea((cur) => (cur === a ? null : a))}
+                        style={on ? { background: AREA_TILE[a].bg, color: AREA_TILE[a].fg } : undefined}
+                        class="flex min-h-[72px] flex-col justify-between rounded-xl bg-muted p-2.5 text-left transition-colors"
                       >
-                        <span class="flex items-center gap-1.5 truncate text-[12px] font-medium">
-                          <span style={{ color: AREA_COLOR[a] }}>
-                            <AreaIcon area={a} />
-                          </span>
-                          {AREA_LABEL[a]}
+                        <span class={`flex items-center gap-1.5 text-[12px] font-medium ${on ? "" : "text-muted-foreground"}`}>
+                          <AreaIcon area={a} class="size-4" />
+                          <span class="truncate">{AREA_LABEL[a]}</span>
                         </span>
-                        <span class="font-data mt-0.5 block text-[15px] font-bold leading-tight">
-                          {v > 0 ? fmtTotal(v) : `${items.length} ses`}
-                        </span>
+                        <b class="font-data text-[17px] font-semibold leading-6">
+                          {v > 0 ? fmtTotal(v) : `${n} ${n === 1 ? "sesión" : "sesiones"}`}
+                        </b>
                       </button>
                     );
                   })}
                 </div>
-              )}
-              <div class={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${drawerArea ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-                <div class="min-h-0 overflow-hidden">
-              {sel && shownArea && (() => {
-                const items = sel.entries.filter((e) => (e.area || "ingles") === shownArea);
-                if (items.length === 0) return null;
-                const listOpen = drawerArea === shownArea;
-                return (
-                  <ul
-                    key={shownArea}
-                    onAnimationEnd={(e) => {
-                      if (e.target === e.currentTarget && !listOpen) setShownArea(null);
-                    }}
-                    class={`mt-1 divide-y divide-border px-1 motion-reduce:animate-none ${listOpen ? "animate-in fade-in-0 slide-in-from-top-2 duration-200" : "animate-out fade-out-0 slide-out-to-top-2 duration-200"}`}
-                  >
-                    {items.map((e, idx) => (
-                      <li key={idx} class="py-2.5">
-                        <div class="flex items-start justify-between gap-4">
-                          <div class="min-w-0">
-                            <p class="truncate text-[13px] font-medium leading-snug">
-                              {(() => {
-                                const t = e.titulo || "";
-                                const cortado = t.length > 36;
-                                const visible = cortado ? t.slice(0, 36).trimEnd() : t;
-                                return (
-                                  <>
-                                    {e.url ? (
-                                      <a href={e.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
-                                        {visible}
-                                      </a>
-                                    ) : visible}
-                                    {cortado && <span class="text-muted-foreground">…</span>}
-                                  </>
-                                );
-                              })()}
-                            </p>
-                            <p class="font-data text-[11px] text-muted-foreground">{e.recurso && e.recurso !== "—" ? `${e.habilidad} · ${e.recurso}` : e.habilidad}</p>
-                            <p class="font-data mt-0.5 truncate text-[11px] text-muted-foreground">{e.notas || " "}</p>
-                          </div>
-                          <span class="inline-flex shrink-0 items-center gap-3">
-                            <span class="w-14 shrink-0 text-right font-data text-[12px] font-semibold">
-                              {e.secs > 0 ? fmtTotal(e.secs) : shownArea === "ejercicio" ? "1 ses" : "—"}
-                            </span>
-                            {e.row ? (
-                              <DropdownMenu label={`Opciones de ${e.titulo}`}>
-                                <DropdownMenuItem onClick={() => { setDayOpen(false); editRow(e); }}>
-                                  <Pencil class="size-5" /> Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem destructive onClick={() => { setDayOpen(false); askDelete(e); }}>
-                                  <Trash2 class="size-5" /> Eliminar
-                                </DropdownMenuItem>
-                              </DropdownMenu>
-                            ) : null}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                );
-              })()}
-                </div>
-              </div>
-            </div>
-            {!(sel && sel.entries.length > 0) && (
-              <p class="mt-2 px-1 py-3 text-sm text-muted-foreground">Sin registros ese día.</p>
+              </>
             )}
-            <div aria-hidden="true" class="h-8" />
+
+            <ul class="mt-2 divide-y divide-border">
+              {selEntries.map((e, idx) => {
+                const a = e.area || "ingles";
+                const sub = [e.habilidad, e.recurso && e.recurso !== "—" ? e.recurso : ""].filter(Boolean).join(" · ");
+                return (
+                  <li key={idx} class="flex items-center gap-3 py-2.5">
+                    <span
+                      class="grid size-9 shrink-0 place-items-center rounded-full"
+                      style={{ background: AREA_TILE[a].bg, color: AREA_TILE[a].fg }}
+                    >
+                      <AreaIcon area={a} class="size-5" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                      <p class="flex items-center gap-1.5 text-[15px] font-medium leading-5">
+                        {e.url ? (
+                          <a
+                            href={e.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            class="truncate text-chart-2 no-underline"
+                            title={e.titulo}
+                          >
+                            {e.titulo}
+                          </a>
+                        ) : (
+                          <span class="truncate" title={e.titulo}>{e.titulo}</span>
+                        )}
+                      </p>
+                      <p class="truncate text-xs text-muted-foreground" title={e.notas || undefined}>{sub}</p>
+                    </div>
+                    <span class="font-data shrink-0 text-[13px] font-semibold">
+                      {e.secs > 0 ? fmtTotal(e.secs) : "—"}
+                    </span>
+                    {e.row ? (
+                      <DropdownMenu label={`Opciones de ${e.titulo}`}>
+                        <DropdownMenuItem onClick={() => { setDayOpen(false); editRow(e); }}>
+                          <Pencil class="size-5" /> Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem destructive onClick={() => { setDayOpen(false); askDelete(e); }}>
+                          <Trash2 class="size-5" /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenu>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            {selEntries.length === 0 && (
+              <p class="py-6 text-center text-sm text-muted-foreground">Sin actividades registradas este día.</p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                const key = daySelKey;
+                setDayOpen(false);
+                if (key) onAddToDay?.(key);
+              }}
+              class="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-chart-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[.99]"
+            >
+              <Plus class="size-5" /> Agregar a este día
+            </button>
           </div>
         )}
       </Sheet>

@@ -21,7 +21,7 @@ const AREA_FORMS = {
 
 /* Shell del formulario: área, día, form específico, contenido+url, nota y submit.
    Cada área vive en su archivo (entry-form/*) para no ensuciar este. */
-export function EntryForm({ onSaved, month, editing }) {
+export function EntryForm({ onSaved, month, editing, defaultDay }) {
   const [, navigate] = useLocation();
   // Sugerencias dentro del mes activo.
   const { rows } = useRows(month);
@@ -33,7 +33,7 @@ export function EntryForm({ onSaved, month, editing }) {
   const areaRows = (rows || []).filter((r) => (r.area || "ingles") === area);
   const AreaForm = AREA_FORMS[area] || EnglishForm;
 
-  const [dia, setDia] = useState(editing?.key || dayKey(new Date()));
+  const [dia, setDia] = useState(editing?.key || defaultDay || dayKey(new Date()));
   const [habilidad, setHabilidad] = useState(editing?.habilidad || preset.habs[0]);
   const [recurso, setRecurso] = useState(editing?.recurso || preset.recs[0] || "—");
   const [duracion, setDuracion] = useState(editing ? fmtTotal(editing.secs || 0) : "");

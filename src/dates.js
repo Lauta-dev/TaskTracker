@@ -76,18 +76,21 @@ export function addDays(key, n) {
 export function monthCells(y, m) {
   const first = new Date(y, m - 1, 1);
   const leading = (first.getDay() + 6) % 7;
-  const daysInMonth = new Date(y, m, 0).getDate();
+  const start = new Date(y, m - 1, 1 - leading);
   const cells = [];
-  for (let i = 0; i < leading; i++) cells.push(null);
-  for (let day = 1; day <= daysInMonth; day++) {
+  // Siempre 6 semanas (42 celdas): la altura de la grilla no cambia entre meses.
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const yy = d.getFullYear();
+    const mm = d.getMonth() + 1;
+    const day = d.getDate();
     const key =
-      String(y).padStart(4, "0") +
+      String(yy).padStart(4, "0") +
       "-" +
-      String(m).padStart(2, "0") +
+      String(mm).padStart(2, "0") +
       "-" +
       String(day).padStart(2, "0");
-    cells.push({ key, day });
+    cells.push({ key, day, outside: yy !== y || mm !== m });
   }
-  while (cells.length % 7 !== 0) cells.push(null);
   return cells;
 }

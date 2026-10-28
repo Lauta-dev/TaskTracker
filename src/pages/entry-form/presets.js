@@ -1,8 +1,15 @@
 /* Un color por área (grilla, drawer, pie y vista Activities). */
 export const AREA_COLOR = {
-  ingles: "var(--color-chart-2)",
-  ejercicio: "var(--color-chart-4)",
-  matematica: "oklch(0.7 0.16 255)",
+  ingles: "var(--area-ingles)",
+  ejercicio: "var(--area-ejercicio)",
+  matematica: "var(--area-matematica)",
+};
+
+/* Par container/on-container para tiles y chips por área. */
+export const AREA_TILE = {
+  ingles: { bg: "var(--area-ingles-container)", fg: "var(--area-ingles-on-container)" },
+  ejercicio: { bg: "var(--area-ejercicio-container)", fg: "var(--area-ejercicio-on-container)" },
+  matematica: { bg: "var(--area-matematica-container)", fg: "var(--area-matematica-on-container)" },
 };
 
 export const field =

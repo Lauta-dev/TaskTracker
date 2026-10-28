@@ -2,19 +2,20 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { cn } from "./cn";
 import { Portal } from "./portal";
 
+/* Drawer inferior con gesto de arrastre para cerrar. Sin barrita visible:
+   un tap seco en la franja de gesto cerraba y volvía a abrir; ahora solo
+   un arrastre real (cliente Y > 8px) mueve al panel, >110px descarta. */
 export function Sheet({ open, onOpenChange, label, children }) {
   const [present, setPresent] = useState(false);
   const [dragY, setDragY] = useState(null);
-  const [dragging, setDragging] = useState(false);
+  const dragging = useRef(false);
+  const moved = useRef(false);
   const startY = useRef(0);
   const panelRef = useRef(null);
 
   useEffect(() => {
-    if (open) {
-      setPresent(true);
-      setDragY(null);
-    }
-  }, [open ]);
+    if (open) setPresent(true);
+  }, [open]);
 
   useEffect(() => {
     if (!open || !present) return;
@@ -27,15 +28,11 @@ export function Sheet({ open, onOpenChange, label, children }) {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [open, present, onOpenChange ]);
-
-  function close() {
-    onOpenChange(false);
-  }
+  }, [open, present, onOpenChange]);
 
   function dismissByDrag() {
     const h = panelRef.current?.offsetHeight ?? 400;
-    setDragging(false);
+    dragging.current = false;
     setDragY(h);
     setTimeout(() => {
       setPresent(false);
@@ -46,72 +43,79 @@ export function Sheet({ open, onOpenChange, label, children }) {
 
   function onPointerDown(e) {
     startY.current = e.clientY;
-    setDragging(true);
+    moved.current = false;
+    dragging.current = true;
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }
 
   function onPointerMove(e) {
-    if (!dragging) return;
-    setDragY(Math.max(0, e.clientY - startY.current));
+    if (!dragging.current) return;
+    const dy = e.clientY - startY.current;
+    // Tap: sin movimiento real no se mueve nada (evita el cerrar/reabrir).
+    if (!moved.current && dy < 8) return;
+    moved.current = true;
+    setDragY(Math.max(0, dy));
   }
 
   function onPointerUp() {
-    if (!dragging) return;
-    if ((dragY ?? 0) > 110) dismissByDrag();
-    else {
-      setDragging(false);
+    if (!dragging.current) return;
+    dragging.current = false;
+    if (moved.current && (dragY ?? 0) > 110) {
+      dismissByDrag();
+    } else if (moved.current) {
       setDragY(0);
       setTimeout(() => setDragY((v) => (v === 0 ? null : v)), 250);
     }
+    /* Tap sin arrastre: la hoja sigue abierta; el click no se traslada al
+       overlay ni dispara acciones del contenido. */
   }
 
   if (!present) return null;
 
   return (
     <Portal>
-    <div class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={label}>
-      <div
-        data-state={open ? "open" : "closed"}
-        onClick={close}
-        class={cn(
-          "absolute inset-0 bg-black/60",
-          open ? "animate-in fade-in-0" : "animate-out fade-out-0",
-        )}
-      />
-      <div
-        ref={panelRef}
-        data-state={open ? "open" : "closed"}
-        onAnimationEnd={(e) => {
-          if (e.target === e.currentTarget && !open && dragY == null) setPresent(false);
-        }}
-        style={
-          dragY != null
-            ? { transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 0.25s ease-out" }
-            : undefined
-        }
-        class={cn(
-          "absolute inset-x-3 bottom-0 mx-auto max-h-[80dvh] w-auto max-w-[680px] overflow-auto rounded-t-2xl bg-popover text-popover-foreground",
-          open && dragY == null ? "animate-in slide-in-from-bottom" : "",
-          !open && dragY == null ? "animate-out slide-out-to-bottom" : "",
-        )}
-      >
+      <div class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={label}>
         <div
-          data-drag-handle
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          style={{ touchAction: "none" }}
-          class="cursor-grab pt-3 pb-1 active:cursor-grabbing"
-          aria-hidden="true"
+          data-state={open ? "open" : "closed"}
+          onClick={() => onOpenChange(false)}
+          class={cn(
+            "absolute inset-0 bg-black/60",
+            open ? "animate-in fade-in-0" : "animate-out fade-out-0",
+          )}
+        />
+        <div
+          ref={panelRef}
+          data-state={open ? "open" : "closed"}
+          onAnimationEnd={(e) => {
+            if (e.target === e.currentTarget && !open && dragY == null) setPresent(false);
+          }}
+          style={
+            dragY != null
+              ? { transform: `translateY(${dragY}px)`, transition: dragging.current ? "none" : "transform 0.25s ease-out" }
+              : undefined
+          }
+          class={cn(
+            "absolute inset-x-2 bottom-2 mx-auto max-h-[88dvh] w-auto max-w-[560px] overflow-auto rounded-[28px] bg-card text-card-foreground",
+            open && dragY == null ? "animate-in slide-in-from-bottom" : "",
+            !open && dragY == null ? "animate-out slide-out-to-bottom" : "",
+          )}
         >
-          <div class="mx-auto h-1.5 w-12 rounded-full bg-muted-foreground/40" />
-        </div>
-        <div class="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {children}
+          {/* Franja de gesto (invisible): reemplaza a la barrita '--'. */}
+          <div
+            data-drag-handle
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            style={{ touchAction: "none" }}
+            class="h-9 shrink-0 select-none"
+            aria-hidden="true"
+          />
+          <div class="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            {children}
+          </div>
         </div>
       </div>
-    </div>
     </Portal>
   );
 }

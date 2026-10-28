@@ -1,34 +1,33 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { useLocation, useSearch } from "wouter";
-import { ChartPie, LayoutGrid, LogOut, Plus, Table, Tags } from "lucide-preact";
+import { useSearch } from "wouter";
+import { Check, LogOut, Plus } from "lucide-preact";
 import { authStatus, logout, saveLastMonth, USE_MOCK } from "./api.js";
+import { MONTH_LABEL } from "./dates.js";
 import { resolveMonth } from "./month.js";
 import { LockScreen } from "./components/LockScreen";
 import { Graph } from "./pages/Graph";
 import { Activities } from "./pages/Activities";
 import { EntryForm } from "./pages/EntryForm";
 import { Modal } from "./components/ui/modal";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 
 const VISTAS = [
-  { value: "grilla", label: "Grilla", Icon: LayoutGrid },
-  { value: "pastel", label: "Pastel", Icon: ChartPie },
-  { value: "tabla", label: "Tabla", Icon: Table },
-  { value: "actividades", label: "Actividades", Icon: Tags },
+  { value: "grilla", label: "Grilla" },
+  { value: "pastel", label: "Pastel" },
+  { value: "tabla", label: "Tabla" },
+  { value: "actividades", label: "Actividades" },
 ];
 
 export function App() {
-  const [, navigate] = useLocation();
   const search = useSearch();
   // FAB que abre el EntryForm en modal.
   const [regOpen, setRegOpen] = useState(false);
+  const [regDay, setRegDay] = useState(null);
   const [editing, setEditing] = useState(null);
   const [vista, setVista] = useState("grilla");
   // Auth: checking → setup (sin cuenta) / login (sin sesión) / app.
   const [auth, setAuth] = useState({ state: USE_MOCK ? "app" : "checking" });
   const authRef = useRef(auth.state);
   authRef.current = auth.state;
-  const current = VISTAS.find((v) => v.value === vista) || VISTAS[0];
 
   // Mes activo: ?month= → último visto → mes actual del dispositivo.
   const month = resolveMonth(search);
@@ -64,12 +63,14 @@ export function App() {
     };
   }, []);
 
-  function openNew() {
+  function openNew(day = null) {
     setEditing(null);
+    setRegDay(typeof day === "string" ? day : null);
     setRegOpen(true);
   }
 
   function openEdit(entry) {
+    setRegDay(null);
     setEditing(entry);
     setRegOpen(true);
   }
@@ -77,6 +78,7 @@ export function App() {
   function closeReg() {
     setRegOpen(false);
     setEditing(null);
+    setRegDay(null);
   }
 
   async function onLogout() {
@@ -90,67 +92,97 @@ export function App() {
   }
 
   return (
-    <div class="min-h-screen bg-background text-foreground">
-      <div class="mx-auto w-full max-w-[680px] px-4 pb-10 pt-8 md:max-w-[1020px]">
-        <header class="mb-5 flex flex-wrap items-center gap-2 md:flex-nowrap md:gap-4">
-          <div class="order-1 flex min-w-0 shrink-0 items-center gap-2">
-            <img src="/icons.svg" alt="Tinta" class="size-7 rounded-md" />
-            <p class="font-display truncate text-[17px] font-semibold tracking-tight md:text-[21px]">Tinta</p>
-            {USE_MOCK && (
-              <span class="font-data rounded-full bg-chart-2/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-foreground">
-                mock
-              </span>
-            )}
+    <div class="min-h-dvh bg-background text-foreground">
+      <div class="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col gap-3 px-4 pb-4 pt-3 min-[840px]:max-w-[1180px] min-[840px]:gap-4 min-[840px]:px-0 min-[840px]:pb-10 min-[840px]:pt-8">
+        <header class="flex h-11 shrink-0 items-center gap-2 min-[840px]:h-12 min-[840px]:gap-3">
+          <div
+            aria-hidden="true"
+            class="grid size-8 shrink-0 place-items-center rounded-full bg-muted font-sans text-[15px] leading-none text-chart-2 min-[840px]:size-10 min-[840px]:text-lg"
+          >
+            語
           </div>
-          <div class="order-2 ml-auto flex shrink-0 items-center gap-2 md:order-3 md:ml-0">
-            <Select value={vista} onValueChange={setVista}>
-              <SelectTrigger aria-label="Vista" className="font-display h-10 w-auto shrink-0 gap-2 rounded-md border-0 bg-muted px-4 text-[15px] font-semibold shadow-none focus-visible:ring-2 md:h-11 md:px-5 md:text-[16px] [&_[data-slot=select-value]]:min-w-0">
-                <SelectValue>
-                  <span class="flex items-center gap-2">
-                    <current.Icon class="size-4 text-muted-foreground" />
-                    {current.label}
-                  </span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {VISTAS.map((v) => (
-                  <SelectItem key={v.value} value={v.value} className="py-2.5 text-[15px]">
-                    <v.Icon class="size-4 text-muted-foreground" />
-                    {v.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <h1 class="font-display min-w-0 flex-1 truncate text-[18px] font-semibold capitalize leading-6 tracking-tight min-[840px]:text-2xl">
+            {MONTH_LABEL(month)}
+          </h1>
+          {USE_MOCK && (
+            <span class="font-data rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              mock
+            </span>
+          )}
+          {!USE_MOCK && (
             <button
               type="button"
-              onClick={openNew}
-              title="Registrar"
-              aria-label="Registrar"
-              class="flex size-10 shrink-0 items-center justify-center rounded-md bg-chart-2 text-background transition-transform duration-150 active:scale-90"
+              onClick={onLogout}
+              title="Salir"
+              aria-label="Salir"
+              class="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
             >
-              <Plus class="size-5" />
+              <LogOut class="size-5" />
             </button>
-            {!USE_MOCK && (
-              <button
-                type="button"
-                onClick={onLogout}
-                title="Salir"
-                aria-label="Salir"
-                class="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted"
-              >
-                <LogOut class="size-5" />
-              </button>
-            )}
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={() => openNew()}
+            class="hidden h-[34px] shrink-0 items-center gap-2 rounded-full bg-chart-2 pl-3 pr-4 text-[13px] font-medium text-primary-foreground transition-transform active:scale-95 min-[840px]:flex"
+          >
+            <Plus class="size-4" /> Registrar
+          </button>
         </header>
-        {current.value === "actividades" ? (
-          <Activities month={month} />
-        ) : (
-          <Graph vista={current.value} onEdit={openEdit} />
-        )}
+
+        <nav
+          aria-label="Vista"
+          class="-mx-4 flex shrink-0 gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[840px]:mx-0 min-[840px]:px-0"
+        >
+          {VISTAS.map((v) => {
+            const active = vista === v.value;
+            return (
+              <button
+                key={v.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setVista(v.value)}
+                class={`flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium transition-colors ${
+                  active
+                    ? "border-transparent bg-secondary pl-2 pr-3 text-secondary-foreground"
+                    : "border-border px-3 text-muted-foreground active:bg-muted"
+                }`}
+              >
+                {active && <Check class="size-4" />}
+                {v.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <main class="min-h-0 flex-1">
+          {vista === "actividades" ? (
+            <Activities month={month} />
+          ) : (
+            <Graph vista={vista} onEdit={openEdit} onAddToDay={(day) => openNew(day)} />
+          )}
+        </main>
+
+        <div class="sticky bottom-3 z-30 mt-auto flex justify-end min-[840px]:hidden">
+          <button
+            type="button"
+            onClick={() => openNew()}
+            class="flex h-12 items-center gap-2 rounded-2xl bg-chart-2 pl-3 pr-4 text-sm font-medium text-primary-foreground shadow-lg shadow-black/40 transition-transform active:scale-95"
+          >
+            <Plus class="size-5" /> Registrar
+          </button>
+        </div>
       </div>
+
       <Modal open={regOpen} onClose={closeReg} label={editing ? "Editar" : "Registrar"}>
-        {regOpen && <EntryForm key={editing?.row || "new"} month={month} editing={editing} onSaved={closeReg} />}
+        {regOpen && (
+          <EntryForm
+            key={editing?.row || regDay || "new"}
+            month={month}
+            editing={editing}
+            defaultDay={regDay}
+            onSaved={closeReg}
+          />
+        )}
       </Modal>
     </div>
   );
