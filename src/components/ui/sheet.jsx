@@ -108,9 +108,11 @@ export function Sheet({ open, onOpenChange, label, children }) {
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             style={{ touchAction: "none" }}
-            class="h-9 shrink-0 select-none"
+            class="flex h-9 shrink-0 items-center justify-center select-none"
             aria-hidden="true"
-          />
+          >
+            <i class="h-1 w-9 rounded-full bg-border" />
+          </div>
           <div class="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {children}
           </div>
