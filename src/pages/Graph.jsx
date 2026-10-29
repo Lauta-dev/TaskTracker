@@ -24,14 +24,14 @@ const WDS = ["L", "M", "X", "J", "V", "S", "D"];
 
 /* Rampas por área (0 = sin registro, 4 = 45+ min). Mismo lenguaje que el
    diseño: verde para Inglés, ámbar para Ejercicio, azul para Matemática. */
-/* Rampa por defecto (sin filtro de área): verde, el acento firma. */
-const RAMP_DEFECTO = ["#151515", "#0f3d24", "#155c37", "#1d9c5c", "#4ce08a"];
+/* Rampa por defecto (sin filtro de área): violeta, el acento firma. */
+const RAMP_DEFECTO = ["#151515", "#241c4f", "#3d2f8f", "#7052d6", "#a78bfa"];
 const RAMPS = {
   ingles: ["#151515", "#0f3d27", "#14633c", "#1f9d5c", "#3ddc84"],
   ejercicio: ["#151515", "#4a2a0c", "#8a4d14", "#cc7a1f", "#ffb366"],
   matematica: ["#151515", "#12304f", "#1b4f85", "#3a89dd", "#7db4ff"],
 };
-const LEVEL_FG = ["#c9c9c9", "#c9e9d6", "#d8f2e2", "#04140b", "#04140b"];
+const LEVEL_FG = ["#c9c9c9", "#e6e0fa", "#efeafd", "#04140b", "#04140b"];
 
 /* Minutos del día -> nivel 0..4 (0 · ≤15 · ≤30 · ≤45 · 45+). */
 function lvlMin(min) {
@@ -576,65 +576,6 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
             </div>
           ) : (
             <Pie key={pieArea || "all"} data={monthly} area={pieArea} onAreaChange={setPieArea} />
-          )}
-        </div>
-      )}
-
-      {vista === "tabla" && (
-        <div key="tabla" class="overflow-hidden rounded-2xl bg-card animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
-          {apiRows === null ? (
-            <div class="space-y-2 p-3" aria-hidden="true">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={"t" + i} class="h-12 animate-pulse rounded-md bg-muted" />
-              ))}
-            </div>
-          ) : rows.length > 0 ? (
-            <table class="w-full table-fixed text-left text-[13px] md:text-[15px]">
-              <thead>
-                <tr class="font-data text-[10px] uppercase tracking-widest text-muted-foreground md:text-[11px]">
-                  <th class="w-10 px-3 py-2 font-medium">Día</th>
-                  <th class="px-3 py-2 font-medium">Actividad</th>
-                  <th class="w-20 px-3 py-2 text-right font-medium">Tiempo</th>
-                  <th class="w-[60px] px-2 py-2"></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {rows.map((r, i) => (
-                  <tr key={r.key + "-" + i}>
-                    <td class="whitespace-nowrap px-3 py-2 font-data text-muted-foreground">{r.key.slice(8, 10)}</td>
-                    <td class="px-3 py-2">
-                      <p class="font-medium leading-snug">
-                        {r.url ? (
-                          <a href={r.url} target="_blank" rel="noreferrer" class="text-chart-2 underline underline-offset-2">
-                            {r.titulo}
-                          </a>
-                        ) : r.titulo}
-                      </p>
-                      <p class="font-data text-[11px] text-muted-foreground md:text-[12px]">
-                        {r.recurso && r.recurso !== "—" ? `${r.habilidad} · ${r.recurso}` : r.habilidad}
-                      </p>
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2 text-right font-data font-semibold">
-                      {r.secs > 0 ? fmtTotal(r.secs) : "—"}
-                    </td>
-                    <td class="whitespace-nowrap py-2 pl-4 pr-2 text-right">
-                      {r.row ? (
-                        <DropdownMenu label={`Opciones de ${r.titulo}`}>
-                          <DropdownMenuItem onClick={() => editRow(r)}>
-                            <Pencil class="size-5" /> Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem destructive onClick={() => askDelete(r)}>
-                            <Trash2 class="size-5" /> Eliminar
-                          </DropdownMenuItem>
-                        </DropdownMenu>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p class="px-4 py-3 text-sm text-muted-foreground">Sin registros este mes.</p>
           )}
         </div>
       )}

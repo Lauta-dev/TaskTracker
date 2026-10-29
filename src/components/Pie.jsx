@@ -3,14 +3,14 @@ import { fmtTotal } from "../format.js";
 import { AREAS, AREA_LABEL } from "../api.js";
 import { AreaIcon } from "./AreaIcon";
 
-const COLORS = [
-  "#4ade80", // verde claro (mes más viejo → verde de la marca)
-  "#14532d", // verde profundo
-  "#1d9c5c", // verde medio
-  "oklch(0.65 0.14 190)", // teal
-  "oklch(0.7 0.15 80)", // ámbar
-  "oklch(0.6 0.17 255)", // azul
-];
+/* Escala de verdes/colores por área activa (meses en orden):
+   [claro, profundo, medio]; default = violeta del acento. */
+const SCALES = {
+  default: ["#a78bfa", "#241c4f", "#7052d6"],
+  ingles: ["#4ade80", "#14532d", "#1d9c5c"],
+  ejercicio: ["#ffb366", "#5a2d05", "#c96a10"],
+  matematica: ["#7db4ff", "#12304f", "#3a89dd"],
+};
 
 const CX = 100;
 const CY = 100;
@@ -39,9 +39,10 @@ function piePath(a0, a1) {
 export function Pie({ data = [], area = null, onAreaChange }) {
   const [sel, setSel] = useState(null);
   const [off, setOff] = useState([]);
+  const palette = SCALES[area] || SCALES.default;
   const items = (data || [])
     .filter((d) => d && typeof d.total === "number" && d.total > 0)
-    .map((d, i) => ({ ...d, color: d.color || COLORS[i % COLORS.length] }));
+    .map((d, i) => ({ ...d, color: d.color || palette[i % palette.length] }));
 
   const isOn = (label) => !off.includes(label);
   const active = items.filter((d) => isOn(d.label));

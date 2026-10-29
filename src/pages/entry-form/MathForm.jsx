@@ -2,7 +2,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../components/ui/select";
 import { DurationField } from "./DurationField.jsx";
-import { field, label } from "./presets.js";
+import { FIELD_BOX, SELECT_TRIGGER, field, label } from "./presets.js";
 import { listOptions } from "../../activities.js";
 
 /* Matemática: Tema libre con sugerencias (los temas son infinitos),
@@ -12,7 +12,7 @@ export function MathForm({ preset, habilidad, setHabilidad, recurso, setRecurso,
   const recs = listOptions("matematica", "rec", rows);
   return (
     <>
-      <div class="mb-4">
+      <div class={`mb-3 ${FIELD_BOX}`}>
         <label class={label} for="f-hab">{preset.habLabel}</label>
         <input
           id="f-hab" type="text" value={habilidad} list="f-temas"
@@ -24,10 +24,10 @@ export function MathForm({ preset, habilidad, setHabilidad, recurso, setRecurso,
         </datalist>
       </div>
 
-      <div class="mb-4">
+      <div class={`mb-3 ${FIELD_BOX}`}>
         <label class={label} for="f-rec">{preset.recLabel}</label>
         <Select value={recurso} onValueChange={setRecurso}>
-          <SelectTrigger id="f-rec"><SelectValue placeholder="Elegí…" /></SelectTrigger>
+          <SelectTrigger id="f-rec" className={SELECT_TRIGGER}><SelectValue placeholder="Elegí…" /></SelectTrigger>
           <SelectContent>
             {recs.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
           </SelectContent>

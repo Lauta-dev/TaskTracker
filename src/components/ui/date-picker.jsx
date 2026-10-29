@@ -8,7 +8,7 @@ function sameDay(a, b) {
   return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-export function DatePicker({ value, onValueChange, placeholder = "Elegí el día", class: cls, className, ...props }) {
+export function DatePicker({ value, onValueChange, placeholder = "Elegí el día", class: cls, className, flat, ...props }) {
   const [open, setOpen] = useState(false);
   const [present, setPresent] = useState(false);
   const today = useMemo(() => new Date(), []);
@@ -70,7 +70,10 @@ export function DatePicker({ value, onValueChange, placeholder = "Elegí el día
         aria-expanded={open}
         data-slot="date-picker-trigger"
         onClick={() => setOpen(!open)}
-        class="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none transition-all duration-200 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        class={cn(
+          "flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none transition-all duration-200 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          flat && "h-11 border-0 bg-transparent px-0 text-[15px] font-medium focus-visible:ring-0",
+        )}
         {...props}
       >
         <CalendarIcon class="size-4 opacity-50" />

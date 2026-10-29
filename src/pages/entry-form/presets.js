@@ -1,4 +1,6 @@
-/* Un color por área (grilla, drawer, pie y vista Activities). */
+/* Subformularios por área: caja FIELD_BOX + trigger de select transparente. */
+export const SELECT_TRIGGER =
+  "h-11 border-0 bg-transparent px-0 text-[15px] font-medium text-foreground focus-visible:ring-0 justify-between [&>svg]:opacity-60";
 export const AREA_COLOR = {
   ingles: "var(--area-ingles)",
   ejercicio: "var(--area-ejercicio)",
@@ -12,10 +14,14 @@ export const AREA_TILE = {
   matematica: { bg: "var(--area-matematica-container)", fg: "var(--area-matematica-on-container)" },
 };
 
+/* Caja de campo estilo Tinta: label mono chico adentro, control sin borde.
+   El focus iluminado vive en la caja (focus-within), no en el control. */
+export const FIELD_BOX =
+  "rounded-xl bg-muted px-3 py-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-ring";
 export const field =
-  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring";
+  "w-full border-0 bg-transparent px-0 py-0.5 text-[15px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0";
 export const label =
-  "font-data mb-1.5 block text-[11px] uppercase tracking-widest text-muted-foreground";
+  "font-data block text-[10px] uppercase tracking-[.14em] text-muted-foreground";
 
 export const PRESETS = {
   ingles: {

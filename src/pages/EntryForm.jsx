@@ -7,7 +7,7 @@ import { useRows } from "../hooks/useRows.js";
 import { parseDuration } from "../parse.js";
 import { dayKey, monthFromKey, MONTH_LABEL } from "../dates.js";
 import { fmtTotal, normalizeUrl, secsToHMS } from "../format.js";
-import { PRESETS, field, label } from "./entry-form/presets.js";
+import { PRESETS, FIELD_BOX as fieldBox, field, label } from "./entry-form/presets.js";
 import { EnglishForm } from "./entry-form/EnglishForm.jsx";
 import { MathForm } from "./entry-form/MathForm.jsx";
 import { WorkoutForm } from "./entry-form/WorkoutForm.jsx";
@@ -119,8 +119,8 @@ export function EntryForm({ onSaved, month, editing, defaultDay, onCancel }) {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} class="rounded-xl border border-border bg-card p-4">
-        <div class="mb-4" role="group" aria-label="Área">
+      <form onSubmit={onSubmit}>
+        <div class="mb-3" role="group" aria-label="Área">
           <div class="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-xl border border-border">
             {AREAS.map((a) => (
               <button
@@ -142,13 +142,14 @@ export function EntryForm({ onSaved, month, editing, defaultDay, onCancel }) {
             ))}
           </div>
         </div>
-        <div class="mb-4">
+        <div class={`mb-3 ${fieldBox}`}>
           <span class={label} id="f-dia-label">Día</span>
           <DatePicker
             value={dia ? new Date(dia + "T12:00:00") : undefined}
             onValueChange={(d) => { if (d) setDia(dayKey(d)); }}
             placeholder="Elegí el día"
             aria-labelledby="f-dia-label"
+            flat
           />
         </div>
 
@@ -174,18 +175,27 @@ export function EntryForm({ onSaved, month, editing, defaultDay, onCancel }) {
           placeholder={preset.contentPh}
         />
 
-        <div class="mb-5">
+        <div class={`mb-3 ${fieldBox}`}>
           <label class={label} for="f-nota">Nota</label>
           <textarea
             id="f-nota" rows={3} value={nota} onInput={(e) => setNota(e.target.value)}
-            placeholder="…" class={field}
+            placeholder="Opcional" class={`${field} resize-none`}
           />
         </div>
 
         {submitError && <p class="mb-3 text-sm text-destructive">{submitError}</p>}
         {queuedMsg && <p class="mb-3 text-sm text-chart-2">{queuedMsg}</p>}
 
-        <div class="mb-1 flex items-center justify-end gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            class="w-full py-1 text-[14px] text-muted-foreground md:hidden"
+          >
+            Cancelar
+          </button>
+        )}
+        <div class={onCancel ? "-mt-2 flex items-center justify-end gap-2 md:mt-1" : "flex items-center justify-end gap-2"}>
           {onCancel && (
             <button
               type="button"

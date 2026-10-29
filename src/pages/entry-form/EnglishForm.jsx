@@ -3,7 +3,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../components/ui/select";
 import { DurationField } from "./DurationField.jsx";
-import { label } from "./presets.js";
+import { FIELD_BOX, SELECT_TRIGGER, label } from "./presets.js";
 import { listOptions } from "../../activities.js";
 import { fetchVideoInfo, parseYouTubeId } from "../../yt.js";
 
@@ -52,20 +52,20 @@ export function EnglishForm({ preset, habilidad, setHabilidad, recurso, setRecur
 
   return (
     <>
-      <div class="mb-4 grid grid-cols-2 gap-3">
-        <div>
+      <div class="mb-3 grid grid-cols-2 gap-3">
+        <div class={FIELD_BOX}>
           <label class={label} for="f-rec">{preset.recLabel}</label>
           <Select value={recurso} onValueChange={setRecurso}>
-            <SelectTrigger id="f-rec"><SelectValue placeholder="Elegí…" /></SelectTrigger>
+            <SelectTrigger id="f-rec" className={SELECT_TRIGGER}><SelectValue placeholder="Elegí…" /></SelectTrigger>
             <SelectContent>
               {recs.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div>
+        <div class={FIELD_BOX}>
           <label class={label} for="f-hab">{preset.habLabel}</label>
           <Select value={habilidad} onValueChange={setHabilidad}>
-            <SelectTrigger id="f-hab"><SelectValue placeholder="Elegí…" /></SelectTrigger>
+            <SelectTrigger id="f-hab" className={SELECT_TRIGGER}><SelectValue placeholder="Elegí…" /></SelectTrigger>
             <SelectContent>
               {habs.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
             </SelectContent>

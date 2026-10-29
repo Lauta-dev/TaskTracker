@@ -1,18 +1,20 @@
 import { parseDuration } from "../../parse.js";
 import { fmtTotal } from "../../format.js";
-import { field, label } from "./presets.js";
+import { FIELD_BOX as fieldBox, field, label } from "./presets.js";
 
 /* Duración con chips de un toque + ayuda en vivo.
    required: true la exige; false la deja opcional (ejercicio). */
 export function DurationField({ value, onChange, required, chips = [] }) {
   const parsed = parseDuration(value);
   return (
-    <div class="mb-4">
-      <label class={label} for="f-dur">Duración{required ? "" : " (opcional)"}</label>
-      <input
-        id="f-dur" type="text" value={value} onInput={(e) => onChange(e.target.value)}
-        placeholder="25m · 1h 30m · 1:00:00 · =25/1440" class={`${field} font-data`}
-      />
+    <div class="mb-3">
+      <div class={fieldBox}>
+        <label class={label} for="f-dur">Duración{required ? "" : " (opcional)"}</label>
+        <input
+          id="f-dur" type="text" value={value} onInput={(e) => onChange(e.target.value)}
+          placeholder="25m · 1h 30m · 1:00:00 · =25/1440" class={`${field} font-data`}
+        />
+      </div>
       {chips.length > 0 && (
         <div class="mt-2 flex flex-wrap gap-1.5">
           {chips.map((c) => (

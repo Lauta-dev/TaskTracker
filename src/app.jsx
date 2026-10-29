@@ -14,7 +14,6 @@ import { Modal } from "./components/ui/modal";
 const VISTAS = [
   { value: "grilla", label: "Grilla" },
   { value: "pastel", label: "Pastel" },
-  { value: "tabla", label: "Tabla" },
   { value: "actividades", label: "Actividades" },
   { value: "listas", label: "Listas" },
 ];
