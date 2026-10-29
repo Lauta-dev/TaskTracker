@@ -21,7 +21,7 @@ const AREA_FORMS = {
 
 /* Shell del formulario: área, día, form específico, contenido+url, nota y submit.
    Cada área vive en su archivo (entry-form/*) para no ensuciar este. */
-export function EntryForm({ onSaved, month, editing, defaultDay }) {
+export function EntryForm({ onSaved, month, editing, defaultDay, onCancel }) {
   const [, navigate] = useLocation();
   // Sugerencias dentro del mes activo.
   const { rows } = useRows(month);
@@ -121,7 +121,7 @@ export function EntryForm({ onSaved, month, editing, defaultDay }) {
 
       <form onSubmit={onSubmit} class="rounded-xl border border-border bg-card p-4">
         <div class="mb-4" role="group" aria-label="Área">
-          <div class="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
+          <div class="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-xl border border-border">
             {AREAS.map((a) => (
               <button
                 key={a}
@@ -133,10 +133,11 @@ export function EntryForm({ onSaved, month, editing, defaultDay }) {
                   setRecurso(p.recs?.[0] || "—");
                 }}
                 aria-pressed={area === a}
-                class={`flex h-9 items-center justify-center gap-1.5 rounded-sm text-[13px] font-semibold transition-colors ${area === a ? "bg-card text-foreground" : "text-muted-foreground"}`}
+                style={area === a ? { background: `var(--area-${a}-container)`, color: `var(--area-${a}-on-container)` } : undefined}
+                class={`flex h-10 min-w-0 items-center justify-center gap-1.5 px-1 text-[13px] transition-colors ${area === a ? "font-semibold" : "text-muted-foreground"}`}
               >
-                <AreaIcon area={a} class="size-4" />
-                {AREA_LABEL[a]}
+                <AreaIcon area={a} class="size-4 shrink-0" />
+                <span class="truncate">{AREA_LABEL[a]}</span>
               </button>
             ))}
           </div>
@@ -184,13 +185,24 @@ export function EntryForm({ onSaved, month, editing, defaultDay }) {
         {submitError && <p class="mb-3 text-sm text-destructive">{submitError}</p>}
         {queuedMsg && <p class="mb-3 text-sm text-chart-2">{queuedMsg}</p>}
 
-        <button
-          type="submit"
-          disabled={!canSave || sending}
-          class="h-11 w-full rounded-md bg-chart-2 text-sm font-semibold text-background transition-opacity active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {sending ? "Guardando…" : editing ? "Guardar cambios" : "Guardar"}
-        </button>
+        <div class="mb-1 flex items-center justify-end gap-2">
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              class="hidden h-11 shrink-0 px-4 text-[14px] font-medium text-muted-foreground transition-colors active:text-foreground md:block"
+            >
+              Cancelar
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={!canSave || sending}
+            class="h-11 flex-1 rounded-full bg-chart-2 text-sm font-semibold text-primary-foreground transition-opacity active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 md:flex-none md:px-10"
+          >
+            {sending ? "Guardando…" : editing ? "Guardar cambios" : "Guardar"}
+          </button>
+        </div>
       </form>
     </div>
   );

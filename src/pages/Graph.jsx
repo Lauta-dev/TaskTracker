@@ -24,14 +24,14 @@ const WDS = ["L", "M", "X", "J", "V", "S", "D"];
 
 /* Rampas por área (0 = sin registro, 4 = 45+ min). Mismo lenguaje que el
    diseño: verde para Inglés, ámbar para Ejercicio, azul para Matemática. */
-/* Rampa por defecto (sin filtro de área): violeta, el acento firma. */
-const RAMP_DEFECTO = ["#151515", "#241c4f", "#3d2f8f", "#7052d6", "#a78bfa"];
+/* Rampa por defecto (sin filtro de área): verde, el acento firma. */
+const RAMP_DEFECTO = ["#151515", "#0f3d24", "#155c37", "#1d9c5c", "#4ce08a"];
 const RAMPS = {
   ingles: ["#151515", "#0f3d27", "#14633c", "#1f9d5c", "#3ddc84"],
   ejercicio: ["#151515", "#4a2a0c", "#8a4d14", "#cc7a1f", "#ffb366"],
   matematica: ["#151515", "#12304f", "#1b4f85", "#3a89dd", "#7db4ff"],
 };
-const LEVEL_FG = ["#c9c9c9", "#e6e0fa", "#efeafd", "#04140b", "#04140b"];
+const LEVEL_FG = ["#c9c9c9", "#c9e9d6", "#d8f2e2", "#04140b", "#04140b"];
 
 /* Minutos del día -> nivel 0..4 (0 · ≤15 · ≤30 · ≤45 · 45+). */
 function lvlMin(min) {

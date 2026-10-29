@@ -6,6 +6,7 @@ import { MONTH_LABEL } from "./dates.js";
 import { resolveMonth } from "./month.js";
 import { LockScreen } from "./components/LockScreen";
 import { Graph } from "./pages/Graph";
+import { Feed } from "./pages/Feed";
 import { Activities } from "./pages/Activities";
 import { EntryForm } from "./pages/EntryForm";
 import { Modal } from "./components/ui/modal";
@@ -15,6 +16,7 @@ const VISTAS = [
   { value: "pastel", label: "Pastel" },
   { value: "tabla", label: "Tabla" },
   { value: "actividades", label: "Actividades" },
+  { value: "listas", label: "Listas" },
 ];
 
 export function App() {
@@ -156,6 +158,8 @@ export function App() {
 
         <main class="min-h-0 flex-1">
           {vista === "actividades" ? (
+            <Feed month={month} onEdit={openEdit} />
+          ) : vista === "listas" ? (
             <Activities month={month} />
           ) : (
             <Graph vista={vista} onEdit={openEdit} onAddToDay={(day) => openNew(day)} />
@@ -181,6 +185,7 @@ export function App() {
             editing={editing}
             defaultDay={regDay}
             onSaved={closeReg}
+            onCancel={closeReg}
           />
         )}
       </Modal>

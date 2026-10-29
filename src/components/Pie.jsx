@@ -4,12 +4,12 @@ import { AREAS, AREA_LABEL } from "../api.js";
 import { AreaIcon } from "./AreaIcon";
 
 const COLORS = [
-  "oklch(0.63 0.17 150)", // verde (acento de la app)
-  "oklch(0.55 0.22 292)", // violeta
+  "#4ade80", // verde claro (mes más viejo → verde de la marca)
+  "#14532d", // verde profundo
+  "#1d9c5c", // verde medio
   "oklch(0.65 0.14 190)", // teal
   "oklch(0.7 0.15 80)", // ámbar
   "oklch(0.6 0.17 255)", // azul
-  "oklch(0.63 0.2 25)", // coral
 ];
 
 const CX = 100;
@@ -68,14 +68,15 @@ export function Pie({ data = [], area = null, onAreaChange }) {
   return (
     <div class="rounded-md border border-border bg-card px-4 py-4">
       {onAreaChange && (
-        <div class="mb-4 grid grid-cols-3 gap-1 rounded-md bg-muted p-1" role="group" aria-label="Filtrar por área">
+        <div class="mb-4 grid grid-cols-3 divide-x divide-border overflow-hidden rounded-xl border border-border" role="group" aria-label="Filtrar por área">
           {AREAS.map((a) => (
             <button
               key={a}
               type="button"
               onClick={() => onAreaChange(area === a ? null : a)}
               aria-pressed={area === a}
-              class={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-sm px-1 text-[13px] font-semibold transition-colors ${area === a ? "bg-card text-foreground" : "text-muted-foreground"}`}
+              style={area === a ? { background: `var(--area-${a}-container)`, color: `var(--area-${a}-on-container)` } : undefined}
+              class={`flex h-10 min-w-0 items-center justify-center gap-1.5 px-1 text-[13px] transition-colors ${area === a ? "font-semibold" : "text-muted-foreground"}`}
             >
               <AreaIcon area={a} class="size-4 shrink-0" />
               <span class="truncate">{AREA_LABEL[a]}</span>
@@ -160,7 +161,7 @@ export function Pie({ data = [], area = null, onAreaChange }) {
           const on = isOn(d.label);
           const seg = segs.find((s) => s.label === d.label);
           return (
-          <li key={d.label} class={`flex items-center gap-1 rounded-sm transition-opacity ${sel !== null && sel !== d.label ? "opacity-40" : ""} ${sel === d.label && on ? "bg-muted" : ""}`}>
+          <li key={d.label} class={`flex items-center gap-1 overflow-hidden rounded-lg transition-all ${on ? (sel === d.label ? "bg-secondary" : "bg-secondary/50") : "opacity-45"} ${sel !== null && sel !== d.label ? "opacity-40" : ""}`}>
             <input
               type="checkbox"
               checked={on}
@@ -194,7 +195,7 @@ export function Pie({ data = [], area = null, onAreaChange }) {
               {current && <span class="inline-block size-2.5 shrink-0 rounded-sm" style={{ background: current.color }} />}
               <span class="truncate">{current ? current.label : "Total"}</span>
             </p>
-            <p class="font-data text-[20px] font-bold leading-tight md:text-[26px]">
+            <p class="font-display text-[26px] font-semibold tracking-tight leading-tight md:text-[32px]">
               {fmtTotal(current ? current.total : grand)}
             </p>
           </div>
