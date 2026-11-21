@@ -38,6 +38,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
+-- API keys para clientes no navegador (app de escritorio).
+-- Solo se guarda el hash SHA-256; el key en claro se muestra una sola vez.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL DEFAULT '',
+  key_hash TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
 -- Seed de ejemplo (borrar de acá para abajo en producción real).
 INSERT INTO entries ("date", "year", "month", "type", "source", "content", "duration", "note", "url", "area") VALUES
   ('2026-10-01', 2026, 10, 'Vocabulary', 'Anki', 'Refold 1k', '0:03:00', '', '', 'ingles'),

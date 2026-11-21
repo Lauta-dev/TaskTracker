@@ -12,11 +12,13 @@ import rows from "./routes/rows.js";
 const app = new Hono();
 
 /* El front (vite :5173) llama a esta API (:8787): sin CORS el navegador bloquea.
-   Con cookies hace falta credentials + origen explícito (nunca *). */
+   Con cookies hace falta credentials + origen explícito (nunca *).
+   Authorization se permite para los clientes con API key (app de escritorio). */
 app.use(
   "*",
   cors({
     origin: (origin, c) => (getAllowedOrigins(c).has(origin) ? origin : null),
+    allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   }),
 );
@@ -24,7 +26,8 @@ app.use(
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/docs", (c) => c.json(API_DOCS));
 
-/* /auth/login es público; el resto exige JWT (middleware en cada router). */
+/* /auth/* (salvo /keys) es público; el resto exige cookie o API key
+   (middleware en cada router). */
 app.route("/auth", auth);
 app.route("/entries", entries);
 app.route("/months", months);

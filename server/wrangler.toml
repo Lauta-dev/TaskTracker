@@ -11,4 +11,7 @@ database_id = "e023370e-570f-4306-9d5e-e86ade12ea36"
 # Orígenes extra con permiso (CORS + CSRF), separados por coma.
 # En prod agregá el dominio del front si vive aparte de la API.
 [vars]
+# ADVERTENCIA: ADMIN_KEY NO va acá (vars no es secreto). En prod:
+#   wrangler secret put ADMIN_KEY
+# En dev se define en .dev.vars (ignorado por git).
 ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,https://task-tracker-two-mocha.vercel.app"

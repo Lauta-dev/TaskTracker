@@ -53,13 +53,76 @@ opcional (sesión simple).
 
 ## Auth
 
-Sesión en cookie `HttpOnly` (`tt_session`): el JS nunca ve el token.
+Doble vía: la PWA usa una sesión en cookie `HttpOnly` (`tt_session`, el JS nunca
+ve el token) y los clientes no navegador (app de escritorio C++/Kirigami) usan
+una **API key** enviada en un header.
 
 - Passwords con **bcrypt** (lib `bcryptjs`), sesiones opacas revocables en D1
-  (`users` + `sessions`), anti-CSRF por `Origin` + `SameSite=Lax`.
+  (`users` + `sessions`), anti-CSRF por `Origin` + `SameSite=Lax` (solo cookie).
 - La cuenta se crea una sola vez: `POST /auth/setup` solo anda con la tabla
   `users` vacía (después responde 403, no hay registro público).
 - Orígenes extra del front (CORS/CSRF): `ALLOWED_ORIGINS` en `wrangler.toml`.
+- `requireAuth` intenta primero la API key (`Authorization: Bearer <key>`) y si
+  no hay header cae a la cookie. `/entries`, `/months` y `/rows` aceptan cualquiera
+  de las dos (401 si ninguna es válida).
+
+### ADMIN_KEY: crear keys sin navegador
+
+La `ADMIN_KEY` es un secreto de entorno que autoriza **solo** `/auth/keys`
+(crear, listar y revocar keys). No da acceso a `/entries`, `/rows` ni `/months`.
+
+- Dev: ponela en `server/.dev.vars` (ignorado por git), p. ej.
+  `ADMIN_KEY="una-clave-larga-y-aleatoria"`.
+- Prod: `wrangler secret put ADMIN_KEY` (**no** va en `wrangler.toml`: los
+  `vars` no son secretos).
+- Requisito: ya debe existir la cuenta (`POST /auth/setup`), ya que las keys se
+  asocian a ese usuario. Aplicá antes la migration de `api_keys`.
+
+```bash
+# crear la key para la app de escritorio
+curl -X POST http://127.0.0.1:8787/auth/keys \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"escritorio"}'
+# → {"id":1,"name":"escritorio","key":"..."}   ← guardalo, se muestra una sola vez
+
+# listar / revocar (opcional, también con la ADMIN_KEY)
+curl -H "Authorization: Bearer $ADMIN_KEY" http://127.0.0.1:8787/auth/keys
+curl -X DELETE -H "Authorization: Bearer $ADMIN_KEY" http://127.0.0.1:8787/auth/keys/1
+```
+
+### API key (app de escritorio)
+
+1. Aplicar la migration (una vez): `wrangler d1 execute DB --file=./migrate-api-keys.sql --remote`
+   (sin `--remote` para la DB local de `wrangler dev`).
+2. Otra opción: con la sesión de la PWA (login en la app o `POST /auth/login`) crear la key:
+
+   ```bash
+   curl -c cookies.txt -X POST http://127.0.0.1:8787/auth/login \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"tu-user","password":"tu-clave"}'
+
+   curl -b cookies.txt -X POST http://127.0.0.1:8787/auth/keys \
+     -H 'Content-Type: application/json' \
+     -d '{"name":"escritorio"}'
+   # → {"id":1,"name":"escritorio","key":"..."}
+   ```
+
+3. Guardar ese `key` en la config de la app de escritorio y mandarlo en **cada** request:
+
+   ```bash
+   curl -H 'Authorization: Bearer <key>' http://127.0.0.1:8787/rows
+   ```
+
+- El key se devuelve **una sola vez**: en D1 solo queda su hash SHA-256. Si se
+  pierde, no se puede recuperar → revocalo y creá otro.
+- `GET /auth/keys` lista las keys (solo metadata), `DELETE /auth/keys/:id` las
+  revoca con efecto inmediato.
+- Seguridad: usar siempre **HTTPS** (el Worker ya lo es), no mandar el key en la
+  URL ni loguearlo, guardarlo en un archivo de config con permisos restrictivos
+  (p. ej. `0600`) y revocarlo si se pierde o se sospecha que se filtró.
+- La app de escritorio puede usar `GET /auth/status` con el header para validar
+  la key y obtener el usuario.
 
 ## Migraciones (DB existentes, aplicar en orden)
 
@@ -67,6 +130,7 @@ Sesión en cookie `HttpOnly` (`tt_session`): el JS nunca ve el token.
 cd server
 wrangler d1 execute DB --file=./migrate-area.sql --remote          # column area (muy viejo)
 wrangler d1 execute DB --file=./migrate-single-table.sql --remote  # DB única: year/month en entries, fuera sheets
+wrangler d1 execute DB --file=./migrate-api-keys.sql --remote      # tabla api_keys (clientes no navegador)
 ```
 
 DB nueva: `wrangler d1 execute DB --file=./schema.sql [--remote]` y, si querés datos de ejemplo, `--file=./seed.sql`.

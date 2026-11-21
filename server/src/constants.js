@@ -50,6 +50,10 @@ export const MAX_USERNAME_LEN = 32;
 export const MIN_PASSWORD_LEN = 8;
 export const MAX_PASSWORD_LEN = 128;
 
+/* Clientes no navegador (app de escritorio): key en el header, no en la URL. */
+export const AUTH = Object.freeze({ HEADER: "Authorization", SCHEME: "Bearer" });
+export const MAX_KEY_NAME_LEN = 64;
+
 export const MSG = Object.freeze({
   NOT_FOUND: "Not found",
   INVALID_ID: "Invalid id: must be a positive integer",
@@ -67,5 +71,9 @@ export const MSG = Object.freeze({
   PASSWORD_TOO_SHORT: `Password must be at least ${MIN_PASSWORD_LEN} chars`,
   PASSWORD_TOO_LONG: `Password must be at most ${MAX_PASSWORD_LEN} chars`,
   AUTH_NOT_CONFIGURED: "Auth not configured",
+  INVALID_API_KEY: "Invalid or revoked API key",
+  NO_ACCOUNT: "No account configured: run POST /auth/setup first",
+  KEY_NOT_FOUND: "API key not found",
+  INVALID_KEY_NAME: `Key name must be at most ${MAX_KEY_NAME_LEN} chars`,
   INTERNAL: "Internal error",
 });

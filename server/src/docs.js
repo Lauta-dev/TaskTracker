@@ -22,7 +22,7 @@ export const API_DOCS = {
   name: "tasktracker-api",
   version: "2.0.0",
   errors: "Todos los errores responden { error: string } con su status HTTP.",
-  auth: "Sesión en cookie HttpOnly (tt_session): el front usa fetch con credentials: include. GET /auth/status dice si falta crear la cuenta o si hay sesión. /entries, /months y /rows exigen sesión (401) y chequean Origin (403).",
+  auth: "Doble vía: cookie HttpOnly (tt_session) para la PWA (fetch con credentials: include) y API key para clientes no navegador (Authorization: Bearer <key>). Las keys se crean y revocan en /auth/keys y se guardan hasheadas en D1. La ADMIN_KEY del entorno (misma forma: Authorization: Bearer <ADMIN_KEY>) permite administrar keys sin navegador y SOLO autoriza /auth/keys, nunca los datos. GET /auth/status dice si falta crear la cuenta o qué usuario está autenticado. /entries, /months y /rows exigen cookie o key (401); la cookie además chequea Origin (403).",
   endpoints: [
     { method: "GET", path: "/health", description: "Pulso del Worker.", response: { ok: true } },
     { method: "GET", path: "/docs", description: "Esta documentación." },
@@ -41,6 +41,18 @@ export const API_DOCS = {
     {
       method: "POST", path: "/auth/logout", description: "Revoca la sesión y limpia la cookie.",
       response: { ok: true },
+    },
+    {
+      method: "POST", path: "/auth/keys", description: "Crea una API key (con cookie, key normal o ADMIN_KEY). El key en claro se devuelve SOLO acá: se guarda hasheado y no se puede recuperar.",
+      body: { name: "escritorio" }, response: { id: 1, name: "escritorio", key: "<key>" }, status: 201,
+    },
+    {
+      method: "GET", path: "/auth/keys", description: "Lista las keys (solo metadata: id, name, createdAt, lastUsedAt, revokedAt).",
+      response: [{ id: 1, name: "escritorio", createdAt: "2026-11-20T12:00:00.000Z", lastUsedAt: null, revokedAt: null }],
+    },
+    {
+      method: "DELETE", path: `/auth/keys/${ID}`, description: "Revoca una key (deja de funcionar de inmediato).",
+      params: { [PARAM.ID]: "entero positivo" }, response: { revoked: 1 },
     },
     {
       method: "GET", path: "/months", description: "Meses con datos, cronológicos.",

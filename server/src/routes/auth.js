@@ -1,12 +1,11 @@
 import { Hono } from "hono";
-import { getCookie } from "hono/cookie";
-import { MSG } from "../constants.js";
-import { endSession, startSession } from "../auth.js";
-import { getSessionUser } from "../db/sessions.js";
+import { MAX_KEY_NAME_LEN, MSG } from "../constants.js";
+import { bearerUser, cookieUser, endSession, requireKeyAdmin, startSession } from "../auth.js";
+import { createApiKey, listApiKeys, revokeApiKey } from "../db/apiKeys.js";
 import { countUsers, createUser, getUserByUsername } from "../db/users.js";
 import { fail, HttpError, ok, STATUS } from "../http.js";
-import { hashPassword, verifyPassword } from "../password.js";
-import { validateLogin, validateSetup } from "../validators.js";
+import { hashPassword, randomToken, verifyPassword } from "../password.js";
+import { parseId, validateLogin, validateSetup } from "../validators.js";
 
 const auth = new Hono();
 
@@ -14,14 +13,13 @@ const auth = new Hono();
 const DUMMY_HASH = "$2b$10$SAKrj.tiahE/N9oKnMc6fu5UpZHE3Waonv3yLybfM4pmSsl/gd9WG";
 
 /* GET /auth/status → { setupRequired, username? }. Público: el front decide
-   si muestra crear-cuenta, login o la app. */
+   si muestra crear-cuenta, login o la app. Acepta cookie o key para identificar. */
 auth.get("/status", async (c) => {
   try {
     if ((await countUsers(c.env.DB)) === 0) {
       return ok(c, { setupRequired: true });
     }
-    const token = getCookie(c, "tt_session");
-    const user = token ? await getSessionUser(c.env.DB, token) : null;
+    const user = (await bearerUser(c)) || (await cookieUser(c));
     return ok(c, user ? { setupRequired: false, username: user.username } : { setupRequired: false });
   } catch (e) {
     return fail(c, e);
@@ -65,6 +63,51 @@ auth.post("/logout", async (c) => {
   try {
     await endSession(c);
     return ok(c, { ok: true });
+  } catch (e) {
+    return fail(c, e);
+  }
+});
+
+/* ---------- API keys (clientes no navegador) ---------- */
+
+/* Gestión de keys: requireKeyAdmin acepta la ADMIN_KEY del entorno (sin
+   navegador) o, si no, cookie/key normal. Se aplica por ruta para cubrir
+   también /keys/:id. */
+
+/* POST /auth/keys { name? }: crea una key. El texto plano se devuelve SOLO
+   acá: después en DB queda el hash y no se puede recuperar. */
+auth.post("/keys", requireKeyAdmin, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const name = body?.name == null ? "" : String(body.name).trim();
+    if (name.length > MAX_KEY_NAME_LEN) {
+      throw new HttpError(STATUS.BAD_REQUEST, MSG.INVALID_KEY_NAME);
+    }
+    const raw = randomToken();
+    const id = await createApiKey(c.env.DB, c.get("user").id, name, raw);
+    return ok(c, { id, name, key: raw }, STATUS.CREATED);
+  } catch (e) {
+    return fail(c, e);
+  }
+});
+
+/* GET /auth/keys: metadata de las keys (nunca el key ni su hash). */
+auth.get("/keys", requireKeyAdmin, async (c) => {
+  try {
+    return ok(c, await listApiKeys(c.env.DB, c.get("user").id));
+  } catch (e) {
+    return fail(c, e);
+  }
+});
+
+/* DELETE /auth/keys/:id: revoca una key (efecto inmediato). */
+auth.delete("/keys/:id", requireKeyAdmin, async (c) => {
+  try {
+    const id = parseId(c.req.param("id"));
+    if (!(await revokeApiKey(c.env.DB, c.get("user").id, id))) {
+      throw new HttpError(STATUS.NOT_FOUND, MSG.KEY_NOT_FOUND);
+    }
+    return ok(c, { revoked: id });
   } catch (e) {
     return fail(c, e);
   }
