@@ -22,7 +22,7 @@ export const API_DOCS = {
   name: "tasktracker-api",
   version: "2.0.0",
   errors: "Todos los errores responden { error: string } con su status HTTP.",
-  auth: "Doble vía: cookie HttpOnly (tt_session) para la PWA (fetch con credentials: include) y API key para clientes no navegador (Authorization: Bearer <key>). Las keys se crean y revocan en /auth/keys y se guardan hasheadas en D1. La ADMIN_KEY del entorno (misma forma: Authorization: Bearer <ADMIN_KEY>) permite administrar keys sin navegador y SOLO autoriza /auth/keys, nunca los datos. GET /auth/status dice si falta crear la cuenta o qué usuario está autenticado. /entries, /months y /rows exigen cookie o key (401); la cookie además chequea Origin (403).",
+  auth: "PWA: cookie HttpOnly (tt_session). Clientes no navegador: Authorization: Bearer <key>. Las keys se gestionan en /auth/keys (con ADMIN_KEY se hace sin navegador). /entries, /months y /rows exigen una de las dos.",
   endpoints: [
     { method: "GET", path: "/health", description: "Pulso del Worker.", response: { ok: true } },
     { method: "GET", path: "/docs", description: "Esta documentación." },
