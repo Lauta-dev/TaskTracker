@@ -7,7 +7,7 @@ import { cn } from "./cn";
  * Menú desplegable estilo shadcn (Trigger + contenido en Portal).
  * Se cierra al elegir, tocar fuera, Escape o hacer scroll.
  */
-export function DropdownMenu({ label, triggerLabel, children }) {
+export function DropdownMenu({ label, triggerLabel, trigger, triggerClass, children }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const btnRef = useRef(null);
@@ -62,9 +62,9 @@ export function DropdownMenu({ label, triggerLabel, children }) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        class="flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground active:bg-muted hover:text-foreground"
+        class={triggerClass || "flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground active:bg-muted hover:text-foreground"}
       >
-        <EllipsisVertical class="size-4" />
+        {trigger ?? <EllipsisVertical class="size-4" />}
       </button>
       {open && (
         <Portal>

@@ -62,6 +62,33 @@ function MonthGrid({ month, rows, areaSel, today, selectedKey, onDayClick, activ
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
+  /* Redondeo dinámico: una esquina solo se redondea cuando la celda no tiene
+     vecina en las dos direcciones que la forman. Cuentan solo los días del
+     mes: los días de otros meses (sin fondo) y las celdas ausentes no son
+     vecinas. Sin condiciones por semana/día/mes. */
+  const cellAt = (r, c) => {
+    if (r < 0 || r >= weeks.length || c < 0 || c >= 7) return null;
+    const cell = weeks[r][c];
+    return cell && !cell.outside ? cell : null;
+  };
+  const radiusOf = (r, c) => {
+    if (!cellAt(r, c)) return "";
+    const up = Boolean(cellAt(r - 1, c));
+    const down = Boolean(cellAt(r + 1, c));
+    const left = Boolean(cellAt(r, c - 1));
+    const right = Boolean(cellAt(r, c + 1));
+    const tl = !up && !left;
+    const tr = !up && !right;
+    const br = !down && !right;
+    const bl = !down && !left;
+    return [
+      tl ? "rounded-tl-lg min-[840px]:rounded-tl-xl" : "",
+      tr ? "rounded-tr-lg min-[840px]:rounded-tr-xl" : "",
+      br ? "rounded-br-lg min-[840px]:rounded-br-xl" : "",
+      bl ? "rounded-bl-lg min-[840px]:rounded-bl-xl" : "",
+    ].filter(Boolean).join(" ");
+  };
+
   const dayInfo = new Map();
   for (const r of rows || []) {
     if (!r.key?.startsWith(prefix)) continue;
@@ -83,33 +110,41 @@ function MonthGrid({ month, rows, areaSel, today, selectedKey, onDayClick, activ
   const ramp = RAMPS[areaSel] || RAMP_DEFECTO;
 
   return (
-    <div class="flex flex-col gap-[5px] min-[840px]:gap-2">
+    <div class="flex flex-col gap-0">
       {weeks.map((row, wi) => (
         <div
           key={"w" + wi}
-          class="grid grid-cols-7 gap-[5px] min-[840px]:grid-cols-[repeat(7,minmax(0,1fr))_76px] min-[840px]:gap-2"
+          class="grid grid-cols-7 gap-0 min-[840px]:grid-cols-[repeat(7,minmax(0,1fr))_76px] min-[840px]:gap-0"
         >
           {row.map((c, ci) => {
+            const radius = radiusOf(wi, ci);
+            /* Líneas de 1px sin duplicar: cada celda dibuja su borde derecho e
+               inferior; la que no tiene vecina arriba/izquierda dibuja además
+               el contorno exterior. Así el bloque queda totalmente delineado. */
+            const borders = [
+              "border-border border-r border-b",
+              cellAt(wi, ci - 1) ? "" : "border-l",
+              cellAt(wi - 1, ci) ? "" : "border-t",
+            ].join(" ");
             if (!c) return <div key={"x" + wi + "-" + ci} aria-hidden="true" />;
-            if (loading) {
-              return (
-                <div
-                  key={"s" + c.key}
-                  aria-hidden="true"
-                  class="aspect-square animate-pulse rounded-lg min-[840px]:rounded-xl bg-muted"
-                />
-              );
-            }
             if (c.outside) {
               return (
                 <div
                   key={c.key}
                   aria-hidden="true"
-                  style={{ background: ramp[0] }}
-                  class="relative flex aspect-square flex-col items-start justify-between rounded-lg p-[5px] text-left text-[11px] leading-none text-muted-foreground opacity-[.45] min-[840px]:rounded-xl min-[840px]:p-3 min-[840px]:text-[15px]"
+                  class={`font-data relative flex aspect-square flex-col items-center justify-center p-[5px] text-center text-[13px] leading-none text-muted-foreground min-[840px]:items-start min-[840px]:justify-between min-[840px]:p-3 min-[840px]:text-left min-[840px]:text-[16px] ${radius}`}
                 >
-                  <span>{c.day}</span>
+                  <span class="opacity-[.45]">{c.day}</span>
                 </div>
+              );
+            }
+            if (loading) {
+              return (
+                <div
+                  key={"s" + c.key}
+                  aria-hidden="true"
+                  class={`font-data aspect-square animate-pulse bg-muted ${borders} ${radius}`}
+                />
               );
             }
             const info = dayInfo.get(c.key);
@@ -128,37 +163,22 @@ function MonthGrid({ month, rows, areaSel, today, selectedKey, onDayClick, activ
                 onClick={() => onDayClick?.(c.key)}
                 title={`${c.day}: ${hasData ? fmtTotal(secs) : "sin registro"}`}
                 style={{ background: ramp[lv], color: LEVEL_FG[lv] }}
-                class={`relative flex aspect-square flex-col items-start justify-between rounded-lg p-[5px] text-left text-[11px] leading-none min-[840px]:rounded-xl min-[840px]:p-3 min-[840px]:text-[15px] ${
+                class={`font-data relative flex aspect-square flex-col items-center justify-center p-[5px] text-center text-[13px] leading-none min-[840px]:items-start min-[840px]:justify-between min-[840px]:p-3 min-[840px]:text-left min-[840px]:text-[16px] ${borders} ${radius} ${
                   isFuture ? "pointer-events-none" : ""
                 } ${hasData ? "cursor-pointer" : "pointer-events-none cursor-default"} ${
                   isSel ? "shadow-[inset_0_0_0_3px_var(--color-chart-2)]" : ""
                 }`}
               >
-                {isToday ? (
-                  /* El nro no se mueve: placeholder invisible + banderín encima. */
-                  <span aria-hidden="true" class="invisible">
-                    {c.day}
-                  </span>
-                ) : (
-                  <span>{c.day}</span>
-                )}
-                <small class="hidden text-[12px] font-medium opacity-85 min-[840px]:block">
+                <span class={isToday ? "rounded-md bg-chart-2 px-1.5 py-0.5 font-semibold leading-none text-[#04140b] min-[840px]:rounded-none" : ""}>
+                  {c.day}
+                </span>
+                <small class="hidden text-[13px] font-medium opacity-85 min-[840px]:block">
                   {hasData ? fmtTotal(secs) : ""}
                 </small>
-                {isToday && (
-                  <span
-                    aria-hidden="true"
-                    class="absolute left-0 top-0 rounded-tl-lg rounded-br-lg border-b border-r border-chart-2 bg-chart-2 p-[5px] min-[840px]:rounded-tl-xl min-[840px]:rounded-br-2xl min-[840px]:p-3"
-                  >
-                    <span class="block font-data text-[11px] font-bold leading-none text-[#04140b] min-[840px]:text-[15px]">
-                      {c.day}
-                    </span>
-                  </span>
-                )}
               </button>
             );
           })}
-          <div class="font-data hidden items-center justify-end pr-2 text-[12px] font-medium whitespace-nowrap text-muted-foreground tabular-nums min-[840px]:flex">
+          <div class="font-data hidden items-center justify-end pr-2 text-[13px] font-medium whitespace-nowrap text-muted-foreground tabular-nums min-[840px]:flex">
             {rows !== null && weekTotal(row) > 0 ? fmtTotal(weekTotal(row)) : ""}
           </div>
         </div>
@@ -180,20 +200,6 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
   const [monthly, setMonthly] = useState(null);
   const [pieArea, setPieArea] = useState(null);
 
-  // Badge del filtro activo junto a "Resumen": entra/aparece con fade,
-  // y al quitarlo se desvanece antes de desmontarse.
-  const [areaBadge, setAreaBadge] = useState(null); // { label, dot }
-  const [areaBadgeOut, setAreaBadgeOut] = useState(false);
-  useEffect(() => {
-    if (areaSel) {
-      setAreaBadge({ label: AREA_LABEL[areaSel], dot: `var(--area-${areaSel})` });
-      setAreaBadgeOut(false);
-    } else if (areaBadge) {
-      setAreaBadgeOut(true);
-      const t = setTimeout(() => setAreaBadge(null), 150);
-      return () => clearTimeout(t);
-    }
-  }, [areaSel]);
   // Swipe horizontal en la grilla para cambiar de mes (las flechas ya no están).
   const swipeRef = useRef(null);
   const swipedRef = useRef(false);
@@ -427,8 +433,8 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
   const selEntries = sel ? sel.entries.filter((e) => !sheetArea || (e.area || "ingles") === sheetArea) : [];
   const queued = month ? pendingCount(month) : 0;
 
-  // Badges de áreas reutilizados como footer de la grilla.
-  const badges = AREAS.map((a) => (
+  // Filtros por área: bajo la grilla en móvil, en el resumen en desktop.
+  const renderBadges = () => AREAS.map((a) => (
     <button
       key={a}
       type="button"
@@ -477,9 +483,9 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
               onPointerCancel={onGridPointerCancel}
             >
               {/* Cabecera fija; solo se deslizan las semanas. */}
-              <div class="grid grid-cols-7 gap-[5px] min-[840px]:grid-cols-[repeat(7,minmax(0,1fr))_76px] min-[840px]:gap-2">
+              <div class="grid grid-cols-7 gap-0 min-[840px]:grid-cols-[repeat(7,minmax(0,1fr))_76px] min-[840px]:gap-0">
                 {WDS.map((w) => (
-                  <div key={w} class="font-data pb-1.5 text-center text-[11px] text-muted-foreground min-[840px]:text-xs">
+                  <div key={w} class="font-data pb-1.5 text-center text-[12px] text-muted-foreground min-[840px]:text-[13px]">
                     {w}
                   </div>
                 ))}
@@ -516,31 +522,24 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
               </div>
             </div>
             {rowError && <p class="mt-2 text-sm text-destructive">{rowError}</p>}
+            {AREAS.length > 0 && (
+              <div
+                class="mt-3 grid gap-1.5 min-[840px]:hidden"
+                style={{ gridTemplateColumns: `repeat(${AREAS.length}, minmax(0, 1fr))` }}
+              >
+                {renderBadges()}
+              </div>
+            )}
           </div>
 
           <aside class="min-w-0">
             <section class="flex flex-col gap-2.5 rounded-[20px] bg-card p-4 min-[840px]:rounded-3xl min-[840px]:p-5">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="font-data text-[11px] uppercase tracking-[.12em] text-muted-foreground">
-                  Resumen del mes
-                </p>
-                <span
-                  aria-hidden={!areaSel}
-                  class={`font-data inline-flex min-h-4 items-center gap-1.5 rounded-full bg-muted px-2 text-[10px] uppercase tracking-[.12em] text-foreground transition-all duration-150 ${
-                    areaSel && !areaBadgeOut ? "opacity-100" : "pointer-events-none opacity-0"
-                  }`}
-                >
-                  <i class="size-1.5 shrink-0 rounded-full" style={{ background: areaBadge?.dot ?? "transparent" }} />
-                  {areaBadge?.label ?? ""}
-                </span>
-              </div>
               <p class="font-display text-[30px] font-semibold leading-[34px] tracking-tight min-[840px]:text-[40px] min-[840px]:leading-[44px]">
                 {apiRows === null ? (
                   <span class="inline-block h-8 w-32 animate-pulse rounded bg-muted align-middle" />
                 ) : (
                   fmtTotal(total)
                 )}
-                <span class="ml-2 font-sans text-xs font-normal tracking-normal text-muted-foreground">registradas</span>
               </p>
               <div class="grid grid-cols-2 gap-1.5">
                 <Kpi value={`${run} días`} label="Racha actual" />
@@ -549,14 +548,14 @@ export function Graph({ onEdit, onAddToDay, vista = "grilla" }) {
                 <Kpi value={daysActive ? fmtTotal(avg) : "—"} label="Promedio por día activo" />
               </div>
 
-              {/* Footer de la card: filtros por área. */}
+              {/* Desktop: filtros por área al pie del resumen. */}
               {AREAS.length > 0 && (
-                <>
+                <div class="hidden min-[840px]:block">
                   <hr class="border-border" />
-                  <div class={`flex w-full flex-wrap gap-1.5 min-[840px]:flex-col min-[840px]:flex-nowrap min-[840px]:gap-0.5`}>
-                    {badges}
+                  <div class="flex w-full flex-col gap-0.5">
+                    {renderBadges()}
                   </div>
-                </>
+                </div>
               )}
             </section>
           </aside>

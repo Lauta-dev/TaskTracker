@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useSearch } from "wouter";
-import { Check, LogOut, Plus } from "lucide-preact";
+import { Check, ChevronDown, LogOut, Plus } from "lucide-preact";
 import { authStatus, logout, saveLastMonth, USE_MOCK } from "./api.js";
 import { MONTH_LABEL } from "./dates.js";
 import { resolveMonth } from "./month.js";
@@ -9,6 +9,7 @@ import { Graph } from "./pages/Graph";
 import { Activities } from "./pages/Activities";
 import { EntryForm } from "./pages/EntryForm";
 import { Modal } from "./components/ui/modal";
+import { DropdownMenu, DropdownMenuItem } from "./components/ui/dropdown-menu";
 
 const VISTAS = [
   { value: "grilla", label: "Grilla" },
@@ -24,6 +25,7 @@ export function App() {
   const [regDay, setRegDay] = useState(null);
   const [editing, setEditing] = useState(null);
   const [vista, setVista] = useState("grilla");
+  const vistaActual = VISTAS.find((v) => v.value === vista);
   // Auth: checking → setup (sin cuenta) / login (sin sesión) / app.
   const [auth, setAuth] = useState({ state: USE_MOCK ? "app" : "checking" });
   const authRef = useRef(auth.state);
@@ -120,6 +122,24 @@ export function App() {
               <LogOut class="size-5" />
             </button>
           )}
+          <DropdownMenu
+            label="Vista"
+            triggerLabel={`Vista: ${vistaActual?.label ?? ""}`}
+            triggerClass="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-[13px] font-medium active:bg-muted"
+            trigger={
+              <>
+                <span>{vistaActual?.label}</span>
+                <ChevronDown class="size-4 text-muted-foreground" />
+              </>
+            }
+          >
+            {VISTAS.map((v) => (
+              <DropdownMenuItem key={v.value} onClick={() => setVista(v.value)}>
+                {vista === v.value ? <Check class="size-4 text-chart-2" /> : <span class="size-4" />}
+                {v.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenu>
           <button
             type="button"
             onClick={() => openNew()}
@@ -128,31 +148,6 @@ export function App() {
             <Plus class="size-4" /> Registrar
           </button>
         </header>
-
-        <nav
-          aria-label="Vista"
-          class="-mx-4 flex shrink-0 gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[840px]:mx-0 min-[840px]:px-0"
-        >
-          {VISTAS.map((v) => {
-            const active = vista === v.value;
-            return (
-              <button
-                key={v.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setVista(v.value)}
-                class={`flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium transition-colors ${
-                  active
-                    ? "border-transparent bg-secondary pl-2 pr-3 text-secondary-foreground"
-                    : "border-border px-3 text-muted-foreground active:bg-muted"
-                }`}
-              >
-                {active && <Check class="size-4" />}
-                {v.label}
-              </button>
-            );
-          })}
-        </nav>
 
         <main class="min-h-0 flex-1">
           {vista === "actividades" ? (
